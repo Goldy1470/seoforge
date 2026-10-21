@@ -58,8 +58,13 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Faceted navigation | `facets.py` | classify params (facet/pagination/tracking) → noindex,follow / canonical / robots rules |
 | Review & FAQ schema on products | `struct.py` | Product + AggregateRating + Review + FAQPage JSON-LD generators & validator |
 | Merchant Center | `merchant.py` | products DB → `g:` XML feed |
-| AI visibility / GEO (from the ChatGPT-rec guide) | `geo.py` | llms.txt, GPTBot/OAI-SearchBot/ClaudeBot robots, FAQ "ten-second test", readiness score |
-| Orchestration | `orchestrator.py` | `seo_audit`, `content_plan`, `full_pipeline` |
+| Rank tracking | `keywords.py` | every SERP run snapshots positions into `rank_snapshots`; `rank-history` diffs over time |
+| Core Web Vitals | `perf.py` | PageSpeed Insights mobile+desktop: PSI score, LCP/TBT/CLS, CrUX, fix hints |
+| Indexing push | `indexing.py` | IndexNow (Bing/Yandex/Seznam), Google sitemap ping, IndexNow key generator |
+| Sitemap hygiene | `indexing.py` | sitemap↔crawl crosscheck: 404s/noindex/thin/canonical drift, pages missing from sitemap |
+| AI-citation test | `geo.py` | ask a frontier LLM your buying questions, count brand/domain citations (the guide's experiment) |
+| Page scaffolds | `paa.py` | one markdown brief + FAQPage JSON-LD per question page for your agent to fill |
+| Orchestration | `orchestrator.py` | `seo_audit`, `content_plan`, `link_building_plan`, `full_pipeline` |
 | Dashboard | `dashboard.py` | FastAPI at :8808 — run jobs, view reports, download exports |
 
 ## Quickstart commands
@@ -68,10 +73,18 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 python -m seoforge.cli crawl                      # full technical sweep of SEOFORGE_SITE_URL
 python -m seoforge.cli audit                      # crawl + facets + links + GEO (+GSC if configured)
 python -m seoforge.cli gsc-auth                   # one-time OAuth (needs GSC_CREDENTIALS_PATH)
+python -m seoforge.cli gsc-opportunities pages    # per-page GSC table (or striking/cannibal/lowctr)
 python -m seoforge.cli paa "best crm for d2c" "how to track amazon sales" --depth 2
 python -m seoforge.cli build-list --min-q 2       # question pages to build, like /free-guides
+python -m seoforge.cli scaffold --min-q 3         # markdown brief + FAQPage JSON-LD per page
 python -m seoforge.cli links                      # internal linking report + suggestions
 python -m seoforge.cli facets                     # faceted navigation policy report
+python -m seoforge.cli sitemap-check              # sitemap vs crawl crosscheck
+python -m seoforge.cli cwv --desktop              # Core Web Vitals (PageSpeed Insights)
+python -m seoforge.cli serp "best tools for seo"  # SERP + PAA + auto rank snapshot
+python -m seoforge.cli rank-history --keyword "..." | --domain "..."
+python -m seoforge.cli indexnow <url1> <url2> --key <key>   # push new pages to engines
+python -m seoforge.cli ai-cite "best amazon agency for D2C brands"   # ChatGPT citation test
 python -m seoforge.cli add-product '{"id":"hp-1","title":"...","price":"2999","link":"...","image":"..."}'
 python -m seoforge.cli feed                       # merchant_center.xml
 python -m seoforge.cli dirs --min-dr 70           # highest-DR places from the 73 list
@@ -85,14 +98,17 @@ python -m seoforge.cli mcp                        # run MCP server for Codex/Cha
 ## API keys you need
 
 - **Google Search Console**: OAuth desktop client secret → `gsc-auth` once.
-- **DataForSEO** ($3 free credit): keyword volumes, SERP/PAA, backlinks.
+- **DataForSEO** ($3 free credit): keyword volumes, SERP/PAA, backlinks, rank snapshots.
 - **OpenSEO**: optional; free tier at openseo.so, attach its MCP for `/seo-audit` skills.
+- **PAGESPEED_API_KEY** (optional): free Google API key for reliable quota on `cwv`.
+- **OPENAI_API_KEY** (optional): enables scripted `ai-cite` runs; otherwise Codex tests by hand.
 - **browser-use**: only for agent submissions; optional.
 
 ## Roadmap
 
-- [x] v0.1 — all modules above as a working scaffold
+- [x] v0.1 — all modules above as a working scaffold (37 MCP tools)
 - [ ] scheduler: nightly GSC pull → weekly delta report (email/Slack)
+- [ ] JS-rendered crawl mode for SPA/Next sites via playwright
 - [ ] content generator: draft the question pages (title/H2/FAQ JSON-LD) with your LLM of choice
-- [ ] rank tracking history + competitor gap graphs in dashboard
+- [ ] rank tracking history graphs in dashboard + competitor gap graphs
 - [ ] multi-model agent mode: Codex/Cursor/Claude adapters

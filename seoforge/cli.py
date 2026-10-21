@@ -25,12 +25,31 @@ def main():
     sub.add_parser("audit")
     sp = sub.add_parser("gsc-auth")
     sp = sub.add_parser("gsc-opportunities")
-    sp.add_argument("kind", nargs="?", default="striking", choices=["striking", "cannibal", "lowctr"])
+    sp.add_argument("kind", nargs="?", default="striking", choices=["striking", "cannibal", "lowctr", "pages"])
 
     sp = sub.add_parser("keyword-ideas")
     sp.add_argument("seed")
     sp = sub.add_parser("serp")
     sp.add_argument("keyword")
+    sp = sub.add_parser("competitor-gap")
+    sp.add_argument("keyword")
+    sp.add_argument("competitor_domain", nargs="?")
+    sp = sub.add_parser("rank-history")
+    sp.add_argument("--keyword", default="")
+    sp.add_argument("--domain", default="")
+    sp = sub.add_parser("cwv")
+    sp.add_argument("url", nargs="?")
+    sp.add_argument("--desktop", action="store_true")
+    sp = sub.add_parser("sitemap-check")
+    sp.add_argument("url", nargs="?")
+    sp = sub.add_parser("indexnow")
+    sp.add_argument("urls", nargs="*")
+    sp.add_argument("--key", default="")
+    sp = sub.add_parser("ai-cite")
+    sp.add_argument("questions", nargs="+")
+    sp = sub.add_parser("scaffold")
+    sp.add_argument("--min-q", type=int, default=3)
+    sp.add_argument("--limit", type=int, default=15)
 
     sub.add_parser("backlink-gap")
     sub.add_parser("openseo")
@@ -83,12 +102,33 @@ def main():
             _out(gsc.striking_distance())
         elif args.kind == "cannibal":
             _out(gsc.cannibalization())
+        elif args.kind == "pages":
+            _out(gsc.pages())
         else:
             _out(gsc.low_ctr())
     elif cmd == "keyword-ideas":
         _out(asyncio.run(keywords.keyword_suggestions(args.seed)))
     elif cmd == "serp":
         _out(asyncio.run(keywords.serp(args.keyword)))
+    elif cmd == "competitor-gap":
+        from . import orchestrator
+        _out(keywords.competitor_gap(args.keyword, args.competitor_domain or ""))
+    elif cmd == "rank-history":
+        _out(keywords.rank_history(args.keyword or None, args.domain or None))
+    elif cmd == "cwv":
+        from . import perf
+        _out(perf.cwv(args.url or settings.site_url, args.desktop))
+    elif cmd == "sitemap-check":
+        from . import indexing
+        _out(indexing.crosscheck(args.url or None), full=True)
+    elif cmd == "indexnow":
+        from . import indexing
+        _out(indexing.indexnow_submit(args.urls, args.key or None))
+    elif cmd == "ai-cite":
+        from . import geo
+        _out(geo.ai_citation_check(args.questions))
+    elif cmd == "scaffold":
+        _out(paa.page_scaffold(args.min_q, args.limit))
     elif cmd == "backlink-gap":
         _out(backlinks.gap())
     elif cmd == "openseo":

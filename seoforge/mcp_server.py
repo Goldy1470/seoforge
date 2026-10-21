@@ -75,6 +75,49 @@ def gsc_inspect(url: str) -> dict:
 
 
 @mcp.tool()
+def gsc_pages(days: int = 90) -> list:
+    """Per-page GSC table: clicks, impressions, CTR, position."""
+    from . import gsc
+
+    return gsc.pages(days)
+
+
+@mcp.tool()
+def competitor_gap(keyword: str, competitor_domain: str = "") -> dict:
+    """SERP + keyword ideas for a keyword, framed against one competitor domain."""
+    from . import keywords
+
+    return keywords.competitor_gap(keyword, competitor_domain)
+
+
+@mcp.tool()
+def rank_history(keyword: str = "", domain: str = "") -> list:
+    """Historical rank snapshots (google_serp saves a snapshot on every run)."""
+    from . import keywords
+
+    return keywords.rank_history(keyword or None, domain or None)
+
+
+@mcp.tool()
+def core_web_vitals(url: str = "", desktop: bool = False) -> dict:
+    """PageSpeed Insights mobile (+desktop) run: PSI score, LCP/TBT/CLS, CrUX field data, fix hints."""
+    from . import perf
+
+    return perf.cwv(url or settings.site_url, desktop)
+
+
+@mcp.tool()
+def indexing_push(urls: list[str], indexnow_key: str = "") -> dict:
+    """Submit new/updated URLs to search engines: IndexNow (+ Bing/Yandex/Seznam) with sitemap ping."""
+    from . import indexing
+
+    out = {"google_sitemap_ping": indexing.ping_sitemap()}
+    if urls:
+        out["indexnow"] = indexing.indexnow_submit(urls, indexnow_key or None)
+    return out
+
+
+@mcp.tool()
 def keyword_ideas(seed: str) -> list:
     """Keyword ideas + volume from DataForSEO."""
     from . import keywords
@@ -130,6 +173,30 @@ def paa_export() -> str:
     from . import paa
 
     return paa.export_paa_csv()
+
+
+@mcp.tool()
+def page_scaffolds(min_questions: int = 3, limit: int = 15) -> dict:
+    """Write one markdown brief + FAQPage JSON-LD template per question page (Codex fills copy)."""
+    from . import paa
+
+    return paa.page_scaffold(min_questions, limit)
+
+
+@mcp.tool()
+def sitemap_crosscheck(site: str = "") -> dict:
+    """Sitemap vs crawl DB: 404/noindex/thin/canonical drift, pages missing from sitemap."""
+    from . import indexing
+
+    return indexing.crosscheck(site or None)
+
+
+@mcp.tool()
+def ai_citation_check(questions: list[str]) -> dict:
+    """Ask a frontier LLM buying questions; count how often it cites your brand/domain (GEO)."""
+    from . import geo
+
+    return geo.ai_citation_check(questions)
 
 
 @mcp.tool()

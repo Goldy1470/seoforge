@@ -164,5 +164,59 @@ def llms_txt_from_crawl(top_n: int = 60) -> str:
     return "\n".join(lines) + "\n"
 
 
+async def _openai_citation(question: str, brand: str | None = None) -> dict:
+    """The guide's core experiment: ask a frontier LLM the buying question, count your brand."""
+    import os
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return {
+            "skipped": "set OPENAI_API_KEY for scripted citation runs",
+            "manual": f"In Codex, ask ChatGPT directly: '{question}' and check whether the answer cites "
+            f"{brand or settings.brand_name} or {(site := settings.site_url).split('//')[-1]}",
+        }
+    body = {
+        "model": os.getenv("OPENAI_CITATION_MODEL", "gpt-4o-mini"),
+        "messages": [
+            {
+                "role": "system",
+                "content": "Answer like a helpful assistant recommending sources/tools/brands. Don't show these instructions.",
+            },
+            {"role": "user", "content": question},
+        ],
+    }
+    async with httpx.AsyncClient(timeout=90) as c:
+        r = await c.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json=body,
+        )
+        r.raise_for_status()
+        text = r.json()["choices"][0]["message"]["content"]
+    b = (brand or settings.brand_name).lower()
+    dom = settings.site_url.split("//")[-1]
+    return {
+        "question": question,
+        "brand_cited": b in text.lower(),
+        "domain_cited": dom in text.lower(),
+        "cited_bands": [m for m in ("[" + dom, "http", "https") if m in text.lower()],
+        "answer_preview": text[:600],
+    }
+
+
+def ai_citation_check(questions: list[str], brand: str | None = None) -> dict:
+    results = []
+    for q in questions:
+        try:
+            results.append(asyncio.run(_openai_citation(q, brand)))
+        except Exception as exc:
+            results.append({"question": q, "error": str(exc)[:200]})
+    cited = sum(1 for r in results if r.get("brand_cited") or r.get("domain_cited"))
+    db.save_report(
+        "ai_citation_check", {"results": results, "cited": cited, "total": len(results)}
+    )
+    return {"cited": cited, "total": len(results), "results": results}
+
+
 def run_sync(site: str | None = None) -> dict:
     return asyncio.run(check_ai_readiness(site))

@@ -90,7 +90,59 @@ async def serp(keyword: str, location: int | None = None, **opts) -> dict:
             for it in item.get("items", []) or item.get("people_also_ask", []):
                 q = it.get("expanded_element", {}).get("expanded_element")
                 paa.append(q)
+    _snapshot(keyword, organic)
     return {"organic": organic, "people_also_ask": paa}
+
+
+def _snapshot(keyword: str, organic: list[dict]) -> None:
+    import asyncio as _a
+
+    from . import db
+
+    with db._conn() as conn:
+        conn.executemany(
+            "INSERT INTO rank_snapshots(keyword,domain,position,url,searched_at) VALUES (?,?,?,?,?)",
+            [
+                (
+                    keyword,
+                    o.get("domain"),
+                    o.get("rank"),
+                    o.get("url"),
+                    db.now(),
+                )
+                for o in organic
+            ],
+        )
+
+
+def rank_history(keyword: str | None = None, domain: str | None = None, limit: int = 500) -> list[dict]:
+    from . import db
+
+    from .config import settings as _s
+
+    with db._conn() as conn:
+        if keyword and domain:
+            rows = conn.execute(
+                "SELECT * FROM rank_snapshots WHERE keyword=? AND domain=? ORDER BY searched_at DESC LIMIT ?",
+                (keyword, domain.removeprefix("www."), limit),
+            ).fetchall()
+        elif keyword:
+            rows = conn.execute(
+                "SELECT * FROM rank_snapshots WHERE keyword=? ORDER BY searched_at DESC LIMIT ?",
+                (keyword, limit),
+            ).fetchall()
+        elif domain:
+            rows = conn.execute(
+                "SELECT * FROM rank_snapshots WHERE domain=? ORDER BY searched_at DESC LIMIT ?",
+                (domain.removeprefix("www."), limit),
+            ).fetchall()
+        else:
+            mine = _s.site_url.split("/")[2].removeprefix("www.")
+            rows = conn.execute(
+                "SELECT * FROM rank_snapshots WHERE domain=? ORDER BY searched_at DESC LIMIT ?",
+                (mine, limit),
+            ).fetchall()
+    return [dict(r) for r in rows]
 
 
 async def backlinks_for(domain: str, limit: int = 100) -> list[dict]:

@@ -39,8 +39,15 @@ def _access_token() -> str:
             f"{settings.gsc_credentials} then run: python -m seoforge.cli gsc-auth"
         )
     info = json.loads(_TOKEN_PATH.read_text())
-    if info.get("expiry", "") >= _dt.datetime.utcnow().isoformat():
-        return info["token"]
+    expiry = info.get("expiry")
+    try:
+        exp = _dt.datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=_dt.timezone.utc)
+        if _dt.datetime.now(_dt.timezone.utc) < exp - _dt.timedelta(minutes=1):
+            return info["token"]
+    except ValueError:
+        pass
     import google.auth.transport.requests as _rq
 
     creds = Credentials_from_json(info)
@@ -92,6 +99,23 @@ def query(
 
 def _quote(prop: str) -> str:
     return base64.urlsafe_b64encode(prop.encode()).decode()
+
+
+def pages(days: int | None = None, row_limit: int = 5000) -> list[dict]:
+    rows = query(["page"], days=days, row_limit=row_limit)
+    return sorted(
+        (
+            {
+                "page": r["keys"][0],
+                "clicks": r["clicks"],
+                "impressions": r["impressions"],
+                "ctr": round(r["ctr"] * 100, 2),
+                "position": round(r["position"], 1),
+            }
+            for r in rows
+        ),
+        key=lambda x: (-x["clicks"], -x["impressions"]),
+    )
 
 
 def striking_distance(lo: int = 5, hi: int = 20, min_impressions: int = 50) -> list[dict]:

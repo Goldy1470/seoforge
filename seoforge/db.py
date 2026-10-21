@@ -73,6 +73,16 @@ CREATE TABLE IF NOT EXISTS products (
   reviews_json TEXT
 );
 
+CREATE TABLE IF NOT EXISTS rank_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT,
+  domain TEXT,
+  position INTEGER,
+  url TEXT,
+  searched_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rank_kw ON rank_snapshots(keyword);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   kind TEXT,

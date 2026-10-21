@@ -32,7 +32,7 @@ def classify_intent(q: str) -> str:
 
 
 def _cluster_key(q: str) -> str:
-    words = re.sub(r"[^\w\s]", "", q.lower()).split()
+    words = re.sub(r"[^\w\s]", " ", q.lower()).split()
     keep = [w for w in words if w not in {"what", "why", "how", "is", "the", "a", "an", "do", "in", "for", "to", "can", "you", "and", "with"}]
     return " ".join(keep[:2]) or q[:30]
 
@@ -62,6 +62,8 @@ async def build_paa_tree(
 ) -> dict:
     job_id = job_id or db.start_job("paa_tree", {"seeds": seeds, "max_depth": max_depth})
     rows = []
+    for s in seeds:
+        add_query(s, seed=s, parent=None, depth=0)
     queue = [(s, s, 0) for s in seeds]
     seen = set()
     results = []
@@ -145,7 +147,7 @@ def generate_build_list(limit: int = 200) -> dict:
 
 
 def finalize(p: dict, idx: int) -> dict:
-    faqs = [q for q in p["faqs"] if q not in p["target_positions"]]
+    faqs = [q for q in p["faqs"] if q not in p.get("target_positions", [])]
     return {
         "priority": idx + 1,
         "path": p["path"],
@@ -171,3 +173,58 @@ def export_paa_csv() -> str:
                 [p["priority"], p["path"], p["title"], p["intent"], p["questions"], p.get("h1", ""), p.get("meta_desc", "")]
             )
     return str(path)
+
+
+def page_scaffold(min_questions: int = 3, limit: int = 15, site: str | None = None, hub: str = "/free-guides") -> dict:
+    """Markdown + FAQPage JSON-LD scaffold per question page, for your agent to fill."""
+    plan = generate_build_list(limit=9999)
+    pages = [p for p in plan["pages"] if p["questions"] >= min_questions][:limit]
+    site = (site or settings.site_url).rstrip("/")
+    out = {}
+    for p in pages:
+        cluster = " ".join(p["path"].strip("/").split("-"))
+        with db._conn() as conn:
+            questions = [
+                r["question"]
+                for r in conn.execute(
+                    "SELECT question FROM paa_questions WHERE cluster=? AND depth>0 ORDER BY depth LIMIT 25",
+                    (cluster,),
+                ).fetchall()
+            ]
+        questions = questions or list(p.get("faqs") or [])
+        fmt = [
+            f"# {p['title']}",
+            f"URL: {site}{p['path']}",
+            f"Meta desc: {p['meta_desc']}",
+            f"Intent: {p['intent']} - target question-shaped queries; schema FAQPage; interlink with {hub}",
+            "",
+            "## Short answer" + (f" for: {questions[0]}" if questions else ""),
+            "[2-3 sentence direct answer - this is the chunk AI engines quote]",
+            "",
+            "## Deep-dive",
+            "- [ ] definition / context",
+            "- [ ] steps / how it works",
+            "- [ ] comparison or when-to-use",
+            "",
+            "## FAQ",
+        ]
+        for q in questions[:12]:
+            fmt += [f"### {q}", "", "[40-80 word answer, server-rendered, no JS required]", ""]
+        fmt += [
+            "## Internal links (required)",
+            f"- hub: {hub}",
+            "- [ ] prev / next in same cluster",
+            "- [ ] closest product page",
+            "",
+            "## JSON-LD to ship",
+            "```json",
+            json.dumps(
+                [{"question": q, "answer": "[fill]"} for q in questions[:8]],
+                indent=2,
+            ),
+            "```",
+        ]
+        md_path = Path(settings.exports_dir) / f"scaffold_{p['path'].strip('/').replace('/', '_')}.md"
+        md_path.write_text("\n".join(fmt), encoding="utf-8")
+        out[p["path"]] = {"markdown": str(md_path), "questions": len(questions)}
+    return {"scaffolded": len(out), "files": out}
