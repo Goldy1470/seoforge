@@ -309,6 +309,78 @@ def llms_txt() -> str:
 
 
 @mcp.tool()
+def opportunity_queue(status: str = "open", kind: str = "", limit: int = 25) -> list:
+    """THE work queue: GSC + PAA + crawl + CWV + backlinks + rank data merged and scored (impact/effort)."""
+    from . import integrations
+
+    return integrations.queue(status, kind, limit)
+
+
+@mcp.tool()
+def opportunities_refresh() -> dict:
+    """Re-blend all sources into the opportunity queue (calls gsc cache; refreshes if stale)."""
+    from . import integrations
+
+    return integrations.recompute()
+
+
+@mcp.tool()
+def opportunity_done(type_target: str) -> str:
+    """Mark an opportunity done; format '<type>|<target>'."""
+    from . import integrations
+
+    return integrations.mark_done(type_target)
+
+
+@mcp.tool()
+def gsc_delta() -> dict:
+    """Nightly-style delta now: last 2 complete days GSC vs prior 7-day baseline + refreshed queue."""
+    from . import scheduler
+
+    return scheduler.nightly_delta()
+
+
+@mcp.tool()
+def watch_add(keyword: str, competitor: str = "") -> str:
+    """Track a keyword in the rank-watch list (serp_watch job snapshots it daily)."""
+    from . import scheduler
+
+    return scheduler.watch_add(keyword, competitor)
+
+
+@mcp.tool()
+def watch_list() -> list:
+    """Current keyword watchlist."""
+    from . import scheduler
+
+    return scheduler.watch_list()
+
+
+@mcp.tool()
+def watch_run() -> dict:
+    """Rank-snapshot all watchlist keywords now."""
+    from . import scheduler
+
+    return scheduler.serp_watch()
+
+
+@mcp.tool()
+def scheduler_status() -> list:
+    """Scheduled jobs, intervals, last run/status."""
+    from . import scheduler
+
+    return scheduler.list_schedule()
+
+
+@mcp.tool()
+def scheduler_run(only_due: bool = True) -> list:
+    """Run due scheduled jobs now (nightly_delta, opps_refresh, sitemap check, serp watch)."""
+    from . import scheduler
+
+    return scheduler.tick(only_due)
+
+
+@mcp.tool()
 def browser_task(task: str) -> str:
     """Run any browser automation with the browser-use agent (logins, submissions, scraping)."""
     from . import browser_agent

@@ -101,6 +101,45 @@ def _quote(prop: str) -> str:
     return base64.urlsafe_b64encode(prop.encode()).decode()
 
 
+def refresh_cache(days: int | None = None) -> int:
+    """Pull query+page rows once into gsc_cache so downstream scoring never re-hits the API."""
+    from . import db
+
+    rows = query(["query", "page"], days=days)
+    stamp = db.now()
+    with db._conn() as conn:
+        conn.execute("DELETE FROM gsc_cache")
+        conn.executemany(
+            "INSERT INTO gsc_cache(query,page,clicks,impressions,ctr,position,pulled_at) VALUES (?,?,?,?,?,?,?)",
+            [
+                (r["keys"][0], r["keys"][1], r["clicks"], r["impressions"], r["ctr"], r["position"], stamp)
+                for r in rows
+            ],
+        )
+    return len(rows)
+
+
+def cache_rows(max_age_hours: int = 24 * 7) -> tuple[list[dict], bool]:
+    from . import db
+
+    with db._conn() as conn:
+        newest = conn.execute("SELECT MAX(pulled_at) m FROM gsc_cache").fetchone()["m"]
+    fresh = bool(newest)
+    if fresh:
+        import datetime as _d
+
+        age = _d.datetime.now() - _d.datetime.fromisoformat(newest)
+        fresh = age <= _d.timedelta(hours=max_age_hours)
+    if not fresh:
+        try:
+            refresh_cache()
+        except SystemExit:
+            fresh = False
+    with db._conn() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM gsc_cache").fetchall()]
+    return rows, bool(rows)
+
+
 def pages(days: int | None = None, row_limit: int = 5000) -> list[dict]:
     rows = query(["page"], days=days, row_limit=row_limit)
     return sorted(

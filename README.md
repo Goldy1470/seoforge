@@ -62,10 +62,43 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Core Web Vitals | `perf.py` | PageSpeed Insights mobile+desktop: PSI score, LCP/TBT/CLS, CrUX, fix hints |
 | Indexing push | `indexing.py` | IndexNow (Bing/Yandex/Seznam), Google sitemap ping, IndexNow key generator |
 | Sitemap hygiene | `indexing.py` | sitemap↔crawl crosscheck: 404s/noindex/thin/canonical drift, pages missing from sitemap |
+| Cross-source value layer | `integrations.py` | gsc cache + PAA + crawl + CWV + tracker + rank history → one scored opportunity queue |
+| Scheduler | `scheduler.py` | nightly GSC delta, keyword watch, due-job tick + daemon |
+| Digests | `notify.py` | Slack webhook or saved report briefs |
 | AI-citation test | `geo.py` | ask a frontier LLM your buying questions, count brand/domain citations (the guide's experiment) |
 | Page scaffolds | `paa.py` | one markdown brief + FAQPage JSON-LD per question page for your agent to fill |
 | Orchestration | `orchestrator.py` | `seo_audit`, `content_plan`, `link_building_plan`, `full_pipeline` |
 | Dashboard | `dashboard.py` | FastAPI at :8808 — run jobs, view reports, download exports |
+
+## Why the integrations pay out (source → value chain)
+
+```
+GSC cache (pulled once/24h) ──┐
+PAA question tree            ├─► integrations.py ──► ONE scored work queue
+crawl DB (+sitemap xcheck)   │   impact ÷ effort    (opportunities table)
+DataForSEO volume            │   per opportunity:
+rank snapshots + watchlist    │   fix_title_meta · build_question_page ·
+CWV (PageSpeed)              │   promote_to_top5 · repair_cannibalization ·
+73-directory tracker         │   internal_link_orphan · cwv_speed ·
+AI citation reports          ┘   backlink_submission (DR≥70 first) · improve_ai_visibility
+```
+
+Live walk-through: GSC shows " amazon marketing agency " at position 8 with 900 impressions,
+the crawler confirms that page has 180 words and 0 internal links pointing to it, the PAA tree
+has 4 matching questions → **one** `promote_to_top5` opportunity (score ~4.2 impact/effort) with
+the refresh-plan attached, instead of four disconnected reports you have to reconcile by hand.
+
+## Why the schedule keeps it compounding
+
+| Job | Every | What it does |
+|---|---|---|
+| `nightly_delta` | 24h | GSC 2-day vs prior 7-day mover report + refreshed work queue → digest (Slack webhook or saved report) |
+| `opps_refresh` | 12h | re-blend all sources into the queue |
+| `weekly_sitemap_check` | 7d | sitemap↔crawl reconciliation |
+| `serp_watch` | 24h | rank snapshots of watchlist keywords, you vs your named competitor |
+
+`python -m seoforge.cli schedule --daemon` runs the loop in a terminal (or hook it into
+`cron`/`schtasks`/`systemd`). Every digest lands in Slack if `SLACK_WEBHOOK_URL` is set.
 
 ## Quickstart commands
 
@@ -90,6 +123,13 @@ python -m seoforge.cli feed                       # merchant_center.xml
 python -m seoforge.cli dirs --min-dr 70           # highest-DR places from the 73 list
 python -m seoforge.cli dirs-update ProductHunt submitted
 python -m seoforge.cli pr                         # digital PR plan
+python -m seoforge.cli watch-add "best crm for d2c" --competitor hubspot.com
+python -m seoforge.cli watch-run                  # rank snapshot of watchlist (you vs competitor)
+python -m seoforge.cli opps                       # the blended work queue
+python -m seoforge.cli opps-refresh
+python -m seoforge.cli delta                      # GSC movers now (also refreshes queue + digest)
+python -m seoforge.cli schedule-status
+python -m seoforge.cli schedule --all             # run every job now; --daemon runs the loop
 python -m seoforge.cli geo                        # AI-readiness score + GPTBot FAQ test
 python -m seoforge.cli serve                      # dashboard http://127.0.0.1:8808
 python -m seoforge.cli mcp                        # run MCP server for Codex/ChatGPT (stdio)
@@ -106,9 +146,9 @@ python -m seoforge.cli mcp                        # run MCP server for Codex/Cha
 
 ## Roadmap
 
-- [x] v0.1 — all modules above as a working scaffold (37 MCP tools)
-- [ ] scheduler: nightly GSC pull → weekly delta report (email/Slack)
+- [x] v0.1 — all modules as a working scaffold (29 MCP tools)
+- [x] v0.2 — cross-source opportunity engine, scheduler + nightly GSC delta, keyword watch, digests (46 tools)
 - [ ] JS-rendered crawl mode for SPA/Next sites via playwright
 - [ ] content generator: draft the question pages (title/H2/FAQ JSON-LD) with your LLM of choice
-- [ ] rank tracking history graphs in dashboard + competitor gap graphs
-- [ ] multi-model agent mode: Codex/Cursor/Claude adapters
+- [ ] rank tracking graphs in dashboard
+- [ ] OpenAI-keyed AI-citation daily trend (citation position tracking)

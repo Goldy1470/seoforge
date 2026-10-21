@@ -84,6 +84,20 @@ def main():
     sub.add_parser("llms")
     sp = sub.add_parser("screenshot")
     sp.add_argument("url")
+    sp = sub.add_parser("watch-add")
+    sp.add_argument("keyword")
+    sp.add_argument("--competitor", default="")
+    sub.add_parser("watch-list")
+    sub.add_parser("watch-run")
+    sub.add_parser("delta")
+    sp = sub.add_parser("opps")
+    sp.add_argument("--kind", default="")
+    sp.add_argument("--limit", type=int, default=25)
+    sub.add_parser("opps-refresh")
+    sp = sub.add_parser("schedule")
+    sp.add_argument("--all", action="store_true")
+    sp.add_argument("--daemon", nargs="?", const=300, type=int)
+    sub.add_parser("schedule-status")
     sub.add_parser("serve")
     sub.add_parser("mcp")
     args = ap.parse_args()
@@ -169,6 +183,32 @@ def main():
         elif args.kind == "review":
             d = json.loads(args.json)
             _out(json.loads(_render_product(d)))
+    elif cmd == "watch-add":
+        from . import scheduler
+        _out(scheduler.watch_add(args.keyword, args.competitor))
+    elif cmd == "watch-list":
+        from . import scheduler
+        _out(scheduler.watch_list())
+    elif cmd == "watch-run":
+        from . import scheduler
+        _out(scheduler.serp_watch())
+    elif cmd == "delta":
+        from . import scheduler
+        _out(scheduler.nightly_delta(), full=True)
+    elif cmd == "opps":
+        from . import integrations
+        _out(integrations.queue("open", args.kind, args.limit))
+    elif cmd == "opps-refresh":
+        from . import integrations
+        _out(integrations.recompute(), full=True)
+    elif cmd == "schedule":
+        from . import scheduler
+        _out(scheduler.tick(not args.all))
+        if args.daemon:
+            scheduler.daemon(args.daemon)
+    elif cmd == "schedule-status":
+        from . import scheduler
+        _out(scheduler.list_schedule())
     elif cmd == "geo":
         from . import geo
 

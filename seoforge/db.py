@@ -83,6 +83,50 @@ CREATE TABLE IF NOT EXISTS rank_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_rank_kw ON rank_snapshots(keyword);
 
+CREATE TABLE IF NOT EXISTS gsc_cache (
+  query TEXT,
+  page TEXT,
+  clicks REAL,
+  impressions REAL,
+  ctr REAL,
+  position REAL,
+  pulled_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_gsc_cache_query ON gsc_cache(query);
+
+CREATE TABLE IF NOT EXISTS watchlist (
+  keyword TEXT PRIMARY KEY,
+  competitor TEXT,
+  added_at TEXT,
+  note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS opportunities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT,
+  target TEXT,
+  impact REAL,
+  effort REAL,
+  score REAL,
+  evidence TEXT,
+  sources TEXT,
+  status TEXT DEFAULT 'open',
+  created_at TEXT,
+  updated_at TEXT,
+  UNIQUE(type, target)
+);
+CREATE INDEX IF NOT EXISTS idx_opp_status ON opportunities(status);
+
+CREATE TABLE IF NOT EXISTS schedule (
+  name TEXT PRIMARY KEY,
+  kind TEXT,
+  interval_hours REAL,
+  enabled INTEGER DEFAULT 1,
+  params TEXT DEFAULT '{}',
+  last_run TEXT,
+  last_status TEXT
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   kind TEXT,
