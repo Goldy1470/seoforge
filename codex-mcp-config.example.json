@@ -1,0 +1,22 @@
+{
+  "mcp_servers": {
+    "seoforge": {
+      "command": "python",
+      "args": ["-m", "seoforge.mcp_server"],
+      "env": {
+        "SEOFORGE_SITE_URL": "https://highprimeco.com",
+        "SEOFORGE_BRAND_NAME": "Highprime",
+        "DATAFORSEO_LOGIN": "your-login",
+        "DATAFORSEO_PASSWORD": "your-password",
+        "GSC_PROPERTY": "https://highprimeco.com/"
+      }
+    },
+    "openseo": {
+      "command": "npx",
+      "args": ["-y", "@openseo/mcp@latest"],
+      "env": {
+        "OPENSEO_API_KEY": "get-at-openseo.so"
+      }
+    }
+  }
+}
