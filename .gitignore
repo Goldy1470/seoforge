@@ -1,0 +1,8 @@
+.env
+exports/
+data/*.db
+data/*.db-*
+data/gsc_client_secret.json
+data/gsc_token.json
+seoforge.egg-info/
+__pycache__/
