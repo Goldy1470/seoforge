@@ -32,7 +32,7 @@ def test_openseo_mode_not_configured_and_setup_cmds():
     setup = openseo.setup_codex()
     assert any("codex mcp login openseo" in c or "plugin add openseo@openseo" in c for c in setup["codex_cli"])
     guide = openseo.selfhost_guide()
-    assert any("alchemy" in s for s in guide["steps"]) and "vercel" in guide["vercel"]
+    assert any("alchemy" in s for s in guide["steps"]) and "vercel" in guide["vercel"].lower()
 
 
 def test_value_report():
