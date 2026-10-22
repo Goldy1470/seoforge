@@ -194,31 +194,11 @@ def raise_for(resp: httpx.Response):
     resp.raise_for_status()
 
 
-async def openseo_passthrough(endpoint: str, params: dict | None = None) -> dict:
-    """Call a hosted OpenSEO-compatible endpoint if configured.
+async def openseo_passthrough(endpoint: str = "status", params: dict | None = None) -> dict:
+    """Live OpenSEO integration status (hosted MCP / API key / self-host on Cloudflare or Docker)."""
+    from . import openseo
 
-    OpenSEO (openseo.so, YC W/S26 batch, open source: github.com/every-app/open-seo)
-    also ships its own MCP server - in Codex you can attach BOTH:
-      - seoforge      (this one)
-      - openseo       (their MCP: /seo-audit /keyword-research /competitor-analysis)
-    This passthrough covers its REST API when OPENSEO_URL is set.
-    """
-    if not settings.openseo_url:
-        return {
-            "detail": "OPENSEO_URL not configured.",
-            "recommended": (
-                "Read https://openseo.so/ for their MCP key, then add their MCP server to "
-                "Codex config alongside seoforge. Skills: /seo-audit /keyword-research /competitor-analysis"
-            ),
-        }
-    url = f"{settings.openseo_url.rstrip('/')}/{endpoint.lstrip('/')}"
-    headers = {}
-    if settings.openseo_api_key:
-        headers["Authorization"] = f"Bearer {settings.openseo_api_key}"
-    async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.post(url, json=params or {}, headers=headers)
-        r.raise_for_status()
-        return r.json()
+    return openseo.status()
 
 
 def competitor_gap(keyword: str, competitor_domain: str) -> dict:

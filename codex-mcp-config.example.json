@@ -1,4 +1,5 @@
 {
+  "_readme": "Attach both servers. OpenSEO = official hosted MCP (OAuth via `codex mcp login openseo`, or API key from app.openseo.so/settings). Preferred: `codex plugin marketplace add every-app/open-seo && codex plugin add openseo@openseo && codex mcp login openseo` - that bundles MCP + all 12 skills.",
   "mcp_servers": {
     "seoforge": {
       "command": "python",
@@ -12,11 +13,13 @@
       }
     },
     "openseo": {
-      "command": "npx",
-      "args": ["-y", "@openseo/mcp@latest"],
-      "env": {
-        "OPENSEO_API_KEY": "get-at-openseo.so"
+      "url": "https://app.openseo.so/mcp",
+      "headers": {
+        "Authorization": "Bearer ${OPENSEO_API_KEY}"
       }
     }
-  }
+  },
+  "_cli_alternative_without_key_oauth": "codex mcp add openseo --url https://app.openseo.so/mcp",
+  "_key_notes": "export OPENSEO_API_KEY=oseo_... ; for headless/CI use --bearer-token-env-var OPENSEO_API_KEY",
+  "_selfhost": "Cloudflare Workers (free, documented) or Docker - NOT Vercel. See seoforge CLI: openseo-selfhost. Then set mcp_servers.openseo.url to https://your-worker.workers.dev/mcp"
 }

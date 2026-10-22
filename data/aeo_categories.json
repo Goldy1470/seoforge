@@ -1,0 +1,71 @@
+{
+  "_readme": "AEO categories: one row per commercial category you sell into. Edit/add for your site. money_patterns use {cat}=name. key_pages are URL prefixes against your crawl DB.",
+  "example_brand": "highprimeco.com",
+  "categories": [
+    {
+      "id": "amazon-agency",
+      "name": "Amazon marketing agency",
+      "key_pages": ["/amazon-marketing-agency"],
+      "money_patterns": ["best {cat} for d2c brands", "top {cat} companies", "{cat} pricing", "how much does an {cat} cost"],
+      "seed_questions": [
+        "What does an Amazon marketing agency do?",
+        "How is Amazon PPC different from Google Ads?",
+        "How much do Amazon agencies charge per month?",
+        "What ACoS should I target on Amazon?"
+      ],
+      "directories": ["Software World", "StartupBase", "Clutch"]
+    },
+    {
+      "id": "ai-seo",
+      "name": "AI SEO / GEO services",
+      "key_pages": ["/ai-seo-services", "/seo-for-d2c-brands", "/how-to-rank-on-chatgpt"],
+      "money_patterns": ["best {cat} tool", "how to rank on chatgpt", "how to get cited by chatgpt", "{cat} pricing"],
+      "seed_questions": [
+        "How do I get my brand recommended by ChatGPT?",
+        "Does llms.txt work for AI answers?",
+        "How to make FAQ readable by AI agents?",
+        "What is answer engine optimization?"
+      ],
+      "directories": ["There's an AI for That", "Toolify AI", "Fazier", "OpenAlternative"]
+    },
+    {
+      "id": "website-development",
+      "name": "Website development agency",
+      "key_pages": ["/website-development"],
+      "money_patterns": ["best {cat} for small business", "top {cat} companies", "{cat} cost", "custom website pricing mumbai"],
+      "seed_questions": [
+        "How much does a website cost in Mumbai?",
+        "What is included in website development?",
+        "Shopify or custom build for a D2C brand?",
+        "How long does a website build take?"
+      ],
+      "directories": ["Startup Stash", "Software Suggest", "StartupBase"]
+    },
+    {
+      "id": "performance-marketing",
+      "name": "Performance marketing agency",
+      "key_pages": ["/performance-marketing-agency"],
+      "money_patterns": ["best {cat} agency", "{cat} fees", "{cat} vs seo", "how much does {cat} cost"],
+      "seed_questions": [
+        "What ROAS can I expect from paid ads?",
+        "Performance marketing vs SEO: which first?",
+        "How do agencies charge for performance marketing?",
+        "What does a performance marketer do daily?"
+      ],
+      "directories": ["StartupBase", "Software World"]
+    },
+    {
+      "id": "local-mumbai",
+      "name": "Marketing agency Mumbai (city pages)",
+      "key_pages": ["/marketing-agency-mumbai", "/marketing-agency-pune", "/marketing-agency-nashik", "/marketing-agency-bangalore", "/marketing-agency-noida", "/marketing-agency-delhi", "/marketing-agency-ahmedabad", "/marketing-agency-surat", "/marketing-agency-noida"],
+      "money_patterns": ["best marketing agency in mumbai", "top digital marketing agency mumbai", "marketing agency mumbai pricing", "best marketing agency near me"],
+      "seed_questions": [
+        "Who is the best marketing agency in Mumbai?",
+        "What is a good marketing budget for Mumbai D2C?",
+        "Do Mumbai agencies also run Amazon?",
+        "How to shortlist a local marketing agency?"
+      ],
+      "directories": ["justdial-like local listings"]
+    }
+  ]
+}

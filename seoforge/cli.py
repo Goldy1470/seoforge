@@ -84,6 +84,18 @@ def main():
     sub.add_parser("llms")
     sp = sub.add_parser("screenshot")
     sp.add_argument("url")
+    sp = sub.add_parser("openseo-setup")
+    sp.add_argument("--no-skills", action="store_true")
+    sub.add_parser("openseo-status")
+    sub.add_parser("openseo-ping")
+    sub.add_parser("openseo-selfhost")
+    sp = sub.add_parser("aeo")
+    sp.add_argument("category", nargs="?")
+    sub.add_parser("aeo-matrix")
+    sub.add_parser("llms-full")
+    sp = sub.add_parser("value")
+    sp.add_argument("--openseo-hosted", action="store_true")
+    sp.add_argument("--markdown", action="store_true")
     sp = sub.add_parser("watch-add")
     sp.add_argument("keyword")
     sp.add_argument("--competitor", default="")
@@ -209,6 +221,33 @@ def main():
     elif cmd == "schedule-status":
         from . import scheduler
         _out(scheduler.list_schedule())
+    elif cmd == "openseo-status":
+        from . import openseo
+        _out(openseo.status())
+    elif cmd == "openseo-setup":
+        from . import openseo
+        _out(openseo.setup_codex(not args.no_skills))
+    elif cmd == "openseo-ping":
+        from . import openseo
+        _out(asyncio.run(openseo.ping()))
+    elif cmd == "openseo-selfhost":
+        from . import openseo
+        _out(openseo.selfhost_guide())
+    elif cmd == "aeo":
+        from . import aeo
+        _out(aeo.funnel_audit(args.category or None), full=True)
+    elif cmd == "aeo-matrix":
+        from . import aeo
+        _out(aeo.funnel_matrix())
+    elif cmd == "llms-full":
+        from . import aeo
+        print(aeo.llms_full_txt_from_crawl())
+    elif cmd == "value":
+        from . import value
+        if args.markdown:
+            print(value.render_markdown(value.value_report(args.openseo_hosted)))
+        else:
+            _out(value.value_report(args.openseo_hosted), full=True)
     elif cmd == "geo":
         from . import geo
 

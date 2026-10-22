@@ -65,6 +65,7 @@ class Settings:
 
     openseo_url: str = os.getenv("OPENSEO_URL", "")
     openseo_api_key: str = os.getenv("OPENSEO_API_KEY", "")
+    openseo_mcp_url: str = os.getenv("OPENSEO_MCP_URL", "https://app.openseo.so/mcp")
 
     browser_agent: str = os.getenv("SEOFORGE_BROWSER_AGENT", "browseruse")
     confirm_submissions: bool = _bool(os.getenv("SEOFORGE_CONFIRM_SUBMISSIONS"), True)

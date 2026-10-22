@@ -1,21 +1,52 @@
 # SEOForge — end-to-end SEO SaaS + MCP plugin for Codex / ChatGPT
 
-One agent-connectable engine that runs the whole SEO loop:
+One agent-connectable engine that runs the whole SEO loop — and, unlike Semrush ($139.95/mo),
+it *executes*, not just reports:
+
+**be found → be answered → be cited → be recommended → be chosen** (AEO/GEO funnel per category)
+
+## Live OpenSEO (the YC open-source Semrush alternative) — 3 paths
+
+| Path | Cost | Setup |
+|---|---|---|
+| **Plugin (best)** | $10/mo hosted | `codex plugin marketplace add every-app/open-seo` → `codex plugin add openseo@openseo` → `codex mcp login openseo` — bundles MCP + all 12 skills (audit, keyword research, **AI-visibility audit**, rank tracking, competitor analysis…) |
+| **API key** | $10/mo hosted | create key at app.openseo.so/settings → `codex mcp add openseo --url https://app.openseo.so/mcp --bearer-token-env-var OPENSEO_API_KEY` |
+| **Self-host** | $0 | Cloudflare Workers (the documented path; **not Vercel** — stack is D1/KV/R2/Workers) or Docker local; bring your own DataForSEO, no 28% hosted markup |
+
+Seoforge-side helper tools: `openseo_status`, `openseo_setup` (paste-ready commands),
+`openseo_ping` (live handshake, no credits), `openseo_skills` (their 12 skills → what each
+feeds back into seoforge's queue), `openseo_selfhost` (full guide). CLI: `openseo-setup` etc.
 
 ```
-            ┌─────────────────────────────────────────────────────────────┐
-            │                     Codex / ChatGPT (MCP)                    │
-            │        /seo-audit  /content-plan  /link-plan  ...           │
-            └──────────────┬──────────────────────────┬──────────────────┘
-                           ▼                          ▼
-        ┌────────────┐  ┌───────────┐  ┌──────────┐  ▼            ┌───────────┐
-        │ GSC        │  │ Crawler   │  │ PAA tree │  │ DataForSEO / │ │ browser-  │
-        │ striking   │  │ (Frog-    │  │ question │  │ OpenSEO       │ │ use agent │
-        │ position   │  │ like)     │  │ pages    │  │ keywords/BL   │ │ (browser) │
-        └────────────┘  └───────────┘  └──────────┘  └──────────────  └───────────┘
-             + internal links + facets + review/FAQ schema + Merchant
-               Center feed + AI-visibility (llms.txt, GPTBot, FAQ test)
+Codex/ChatGPT
+ ├─ seoforge MCP (46+ tools): crawl/GSC/PAA/queue/schema/browser/scheduler   ← owns the work queue
+ └─ openseo MCP (hosted):    keywords/competitors/AI-visibility/rank data   ← feeds the queue
+        skills bridge: keyword-research→watchlist, ai-visibility-audit→funnel cited+recommended,
+        competitor-analysis→watch_add, link-prospecting→73-dir tracker, keyword-clustering→PAA tree
 ```
+
+## The GEO/AEO funnel — `aeo.py`, category-wise (`data/aeo_categories.json`)
+
+Per commercial category (amazon-agency, ai-seo, website-development, performance-marketing,
+local-mumbai — edit for your site):
+
+| Stage | What it measures | Fixed by |
+|---|---|---|
+| **found** (0-100) | per-agent robots (GPTBot, ClaudeBot, PerplexityBot…), llms.txt **+ llms-full.txt** (llms.txt alone is outdated), sitemap, server-rendered FAQ (GPTBot reads only raw HTML) | robots + `llms-full` tool + pre-render |
+| **answered** (0-100) | the category's real buying questions match page headings, a 40-70 word literal answer block exists in first 1000 chars, FAQPage JSON-LD present | `struct.faq`, page scaffolds |
+| **cited** (0-100) | does an LLM actually cite you? (ai_citation_check; OpenSEO's multi-model citation tool as bridge) | first-party data, sameAs entity, methodology |
+| **recommended** (0-100) | 'best X' shortlist presence: rank snapshots + AI-directory listings + the "how to choose X" comparison page agents love to cite | build the comparison page, get listed (73-list) |
+| **chosen** (0-100) | assistive-agent actionability: Offer/Review schema, visible price, clear CTA, tel:/mailto:/wa.me machine-readable contact | `struct.product`, pricing block |
+
+Commands: `python -m seoforge.cli aeo ai-seo` · `aeo-matrix` · `llms-full` (write results to
+`/llms-full.txt`) · MCP: `aeo_funnel`, `aeo_matrix`, `value_vs_semrush`.
+
+## Why it beats a $140/mo suite (run `value_vs_semrush` / `value --markdown`)
+
+16-module coverage matrix + cost model: Semrush Pro $139.95/mo → SEOForge stack
+≈ $0-25/mo (self-host, or +$10 OpenSEO hosted) for equal data depth — plus the four
+"beyond rankings" stages Semrush doesn't touch (question pages, execution agent, IndexNow,
+nightly scored queue). Dashboard shows the counter on the front page.
 
 ## Install
 
@@ -65,6 +96,9 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Cross-source value layer | `integrations.py` | gsc cache + PAA + crawl + CWV + tracker + rank history → one scored opportunity queue |
 | Scheduler | `scheduler.py` | nightly GSC delta, keyword watch, due-job tick + daemon |
 | Digests | `notify.py` | Slack webhook or saved report briefs |
+| Live OpenSEO | `openseo.py` | hosted-MCP / API-key / self-host modes, setup commands, 12-skill bridge |
+| AEO/GEO funnel | `aeo.py` | found → answered → cited → recommended → chosen, category-wise scores + fixes, llms-full.txt |
+| Value vs Semrush | `value.py` | 16-module coverage matrix + $139.95 vs stack cost counter |
 | AI-citation test | `geo.py` | ask a frontier LLM your buying questions, count brand/domain citations (the guide's experiment) |
 | Page scaffolds | `paa.py` | one markdown brief + FAQPage JSON-LD per question page for your agent to fill |
 | Orchestration | `orchestrator.py` | `seo_audit`, `content_plan`, `link_building_plan`, `full_pipeline` |
@@ -148,7 +182,7 @@ python -m seoforge.cli mcp                        # run MCP server for Codex/Cha
 
 - [x] v0.1 — all modules as a working scaffold (29 MCP tools)
 - [x] v0.2 — cross-source opportunity engine, scheduler + nightly GSC delta, keyword watch, digests (46 tools)
+- [x] v0.3 — live OpenSEO (hosted/key/self-host), AEO funnel per category, llms-full.txt, Semrush value counter (54 tools)
 - [ ] JS-rendered crawl mode for SPA/Next sites via playwright
 - [ ] content generator: draft the question pages (title/H2/FAQ JSON-LD) with your LLM of choice
-- [ ] rank tracking graphs in dashboard
-- [ ] OpenAI-keyed AI-citation daily trend (citation position tracking)
+- [ ] OpenAI-keyed AI-citation daily trend (citation position tracking in the funnel)

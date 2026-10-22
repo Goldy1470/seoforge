@@ -24,6 +24,20 @@ def index():
             "SELECT type,target,impact,effort,score FROM opportunities WHERE status='open' ORDER BY score DESC LIMIT 10"
         ).fetchall()
         sched = conn.execute("SELECT name,kind,interval_hours,last_status FROM schedule WHERE enabled=1 ORDER BY interval_hours").fetchall()
+        import json as _json
+
+        value_row = conn.execute(
+            "SELECT payload FROM reports WHERE kind='value_report' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        value_summary = _json.loads(value_row["payload"])["cost"] if value_row else None
+        funnel_rows = conn.execute(
+            "SELECT payload FROM reports WHERE kind='aeo_funnel' ORDER BY id DESC LIMIT 5"
+        ).fetchall()
+        funnel_els = "".join(
+            f"<li>{_json.loads(f['payload'])['name']}: overall {_json.loads(f['payload'])['overall_score']}/100 "
+            f"({', '.join(f'{k}:{_json.loads(f['payload'])['stages'][k]['score']}' for k in ('found','answered','cited','recommended','chosen'))})</li>"
+            for f in funnel_rows
+        )
     rows = "".join(
         f"<tr><td>{j['id']}</td><td>{j['kind']}</td><td>{j['status']}</td><td>{j['started_at']}</td></tr>"
         for j in jobs
@@ -35,6 +49,12 @@ def index():
         for o in opps
     ) or "<tr><td colspan=5>no opportunities - press Opps-refresh or configure GSC/DataForSEO</td></tr>"
     sched_els = " · ".join(f"{s['name']}({s['kind']}/{s['interval_hours']}h:{s['last_status'] or 'never'})" for s in sched)
+    value_els = (
+        f"Semrush Pro: ${value_summary['semrush_pro_per_month']}/mo → SEOForge stack: ${value_summary['seoforge_stack_total']}/mo "
+        f"(save ${value_summary['savings_usd_month']}/mo)"
+        if value_summary
+        else "run the <em>save-value</em> button once"
+    )
     return f"""<html><head><meta charset=utf-8><title>SEOForge</title>
 <style>body{{font-family:ui-monospace;font-size:14px;max-width:900px;margin:30px auto}}
 table{{border-collapse:collapse}}td{{border:1px solid #ccc;padding:4px 10px}}
@@ -49,7 +69,11 @@ button{{padding:6px 14px;margin:4px 2px}}</style></head><body>
 <form method=post action=/run/audit style=display:inline><button>Full audit</button></form>
 <form method=post action=/run/opps style=display:inline><button>Opps-refresh</button></form>
 <form method=post action=/run/delta style=display:inline><button>GSC delta</button></form>
+<form method=post action=/run/value style=display:inline><button>Value report</button></form>
 </p>
+<p><b>Cost:</b> {value_els}</p>
+<p><b>AEO funnel per category</b> (found → answered → cited → recommended → chosen):</p>
+<ul>{funnel_els or '<li>run <code>aeo &lt;category&gt;</code> or the MCP tool aeo_funnel</li>'}</ul>
 <h2>Work queue (impact/effort scored)</h2>
 <table><tr><th>type</th><th>target</th><th>impact</th><th>effort</th><th>score</th></tr>{opp_els}</table>
 <p><b>Schedule:</b> {sched_els}</p>
@@ -72,6 +96,7 @@ def run_job(kind: str):
         "audit": lambda: orchestrator.seo_audit(),
         "opps": lambda: integrations.recompute(persist=True),
         "delta": lambda: _scheduler_delta(),
+        "value": lambda: _value_save(),
     }
     fn = fns.get(kind)
     if not fn:
@@ -107,6 +132,16 @@ def _scheduler_delta():
         return {"skipped": str(exc)}
     except Exception as exc:
         return {"error": str(exc)[:200]}
+
+
+def _value_save():
+    from . import integrations, value
+
+    report = value.value_report()
+    rid = db.save_report("value_report", report)
+    report["report_id"] = rid
+    integrations.recompute(persist=True)
+    return report
 
 
 def _clip(o, n=4000):

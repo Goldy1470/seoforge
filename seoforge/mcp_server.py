@@ -142,11 +142,76 @@ def backlink_gap(domain: str = "") -> dict:
 
 
 @mcp.tool()
-def openseo_capabilities() -> dict:
-    """How to pair with OpenSEO (YC, openseo.so): MCP to attach + REST passthrough."""
-    from . import keywords
+def openseo_status() -> dict:
+    """Live OpenSEO integration status: hosted MCP / API key / self-host mode + costs."""
+    from . import openseo
 
-    return asyncio.run(keywords.openseo_passthrough("ping"))
+    return openseo.status()
+
+
+@mcp.tool()
+def openseo_setup(include_skills: bool = True) -> dict:
+    """Paste-ready commands to attach OpenSEO MCP+skills to Codex (or Cursor/Claude variants)."""
+    from . import openseo
+
+    return openseo.setup_codex(include_skills)
+
+
+@mcp.tool()
+def openseo_ping() -> dict:
+    """Live MCP handshake against OpenSEO (uses no SEO credits)."""
+    from . import openseo
+
+    return asyncio.run(openseo.ping())
+
+
+@mcp.tool()
+def openseo_skills() -> list:
+    """The 12 official OpenSEO skills and what each feeds back into seoforge."""
+    from . import openseo
+
+    return openseo.skills_map()
+
+
+@mcp.tool()
+def openseo_selfhost() -> dict:
+    """Self-host OpenSEO for $0: Cloudflare Workers path (the documented one; not Vercel) or Docker."""
+    from . import openseo
+
+    return openseo.selfhost_guide()
+
+
+@mcp.tool()
+def aeo_funnel(category_id: str = "") -> dict:
+    """GEO/AEO funnel per category: be found -> answered -> cited -> recommended -> chosen. Scores + fixes."""
+    from . import aeo
+
+    return aeo.funnel_audit(category_id or None)
+
+
+@mcp.tool()
+def aeo_matrix() -> list:
+    """Funnel scores for every category in data/aeo_categories.json."""
+    from . import aeo
+
+    return aeo.funnel_matrix()
+
+
+@mcp.tool()
+def aeo_llms_full() -> str:
+    """Generate llms-full.txt (index + corpus) from the crawl DB - llms.txt alone is outdated."""
+    from . import aeo
+
+    return aeo.llms_full_txt_from_crawl()
+
+
+@mcp.tool()
+def value_vs_semrush(openseo_hosted: bool = False, markdown: bool = False) -> dict | str:
+    """Semrush $139.95/mo vs the SEOForge stack: module coverage matrix + cost model."""
+    from . import value
+
+    report = value.value_report(openseo_hosted)
+    return value.render_markdown(report) if markdown else report
 
 
 @mcp.tool()
