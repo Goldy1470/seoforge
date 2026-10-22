@@ -30,6 +30,10 @@ def index():
             "SELECT payload FROM reports WHERE kind='value_report' ORDER BY id DESC LIMIT 1"
         ).fetchone()
         value_summary = _json.loads(value_row["payload"])["cost"] if value_row else None
+        pref_row = conn.execute(
+            "SELECT payload FROM reports WHERE kind='preferred_sources' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        pref = _json.loads(pref_row["payload"]) if pref_row else None
         funnel_rows = conn.execute(
             "SELECT payload FROM reports WHERE kind='aeo_funnel' ORDER BY id DESC LIMIT 5"
         ).fetchall()
@@ -55,6 +59,16 @@ def index():
         if value_summary
         else "run the <em>save-value</em> button once"
     )
+    if pref:
+        e = pref["eligible"]
+        pref_stat = (
+            f"fresh content: {'yes' if e['publishes_fresh_content'] else 'NO - weekly cadence needed'} · "
+            f"button on site: {'yes' if e['button_on_site'] else 'no'}"
+        )
+        pref_els = "".join(f"<li>{c}</li>" for c in pref["checklist"])
+    else:
+        pref_stat = "not audited yet"
+        pref_els = "<li>run <em>Preferred Sources</em> — Google's newest free lever (Top Stories + AI Overviews/AI Mode badge, 2× CTR)</li>"
     return f"""<html><head><meta charset=utf-8><title>SEOForge</title>
 <style>body{{font-family:ui-monospace;font-size:14px;max-width:900px;margin:30px auto}}
 table{{border-collapse:collapse}}td{{border:1px solid #ccc;padding:4px 10px}}
@@ -70,8 +84,11 @@ button{{padding:6px 14px;margin:4px 2px}}</style></head><body>
 <form method=post action=/run/opps style=display:inline><button>Opps-refresh</button></form>
 <form method=post action=/run/delta style=display:inline><button>GSC delta</button></form>
 <form method=post action=/run/value style=display:inline><button>Value report</button></form>
+<form method=post action=/run/preferred style=display:inline><button>Preferred Sources</button></form>
 </p>
 <p><b>Cost:</b> {value_els}</p>
+<p><b>Preferred Sources</b> (Google's newest free lever — Top Stories + AI Overviews/AI Mode badge, 2× CTR): {pref_stat}</p>
+<ul>{pref_els}</ul>
 <p><b>AEO funnel per category</b> (found → answered → cited → recommended → chosen):</p>
 <ul>{funnel_els or '<li>run <code>aeo &lt;category&gt;</code> or the MCP tool aeo_funnel</li>'}</ul>
 <h2>Work queue (impact/effort scored)</h2>
@@ -97,6 +114,7 @@ def run_job(kind: str):
         "opps": lambda: integrations.recompute(persist=True),
         "delta": lambda: _scheduler_delta(),
         "value": lambda: _value_save(),
+        "preferred": lambda: _preferred_save(),
     }
     fn = fns.get(kind)
     if not fn:
@@ -132,6 +150,12 @@ def _scheduler_delta():
         return {"skipped": str(exc)}
     except Exception as exc:
         return {"error": str(exc)[:200]}
+
+
+def _preferred_save():
+    from . import preferred
+
+    return preferred.audit()
 
 
 def _value_save():

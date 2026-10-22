@@ -206,6 +206,22 @@ def aeo_llms_full() -> str:
 
 
 @mcp.tool()
+def preferred_sources_audit(site: str = "") -> dict:
+    """Google Preferred Sources audit: eligibility (fresh content, domain property, SGEA-in-GSC), official button snippet, checklist."""
+    from . import preferred
+
+    return preferred.audit(site or None)
+
+
+@mcp.tool()
+def preferred_sources_button(theme: str = "light", lang: str = "", mode: str = "standard") -> dict:
+    """Copy-paste 'Add to Preferred Sources' button code (Google's official publisher.js embed). mode: standard|manual|esm."""
+    from . import preferred
+
+    return preferred.embed_snippet(theme, lang or None, mode)
+
+
+@mcp.tool()
 def value_vs_semrush(openseo_hosted: bool = False, markdown: bool = False) -> dict | str:
     """Semrush $139.95/mo vs the SEOForge stack: module coverage matrix + cost model."""
     from . import value

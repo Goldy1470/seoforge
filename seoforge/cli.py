@@ -96,6 +96,12 @@ def main():
     sp = sub.add_parser("value")
     sp.add_argument("--openseo-hosted", action="store_true")
     sp.add_argument("--markdown", action="store_true")
+    sp = sub.add_parser("preferred")
+    sp.add_argument("url", nargs="?")
+    sp = sub.add_parser("preferred-btn")
+    sp.add_argument("--theme", default="light", choices=["light", "dark"])
+    sp.add_argument("--lang", default="")
+    sp.add_argument("--mode", default="standard", choices=["standard", "manual", "esm"])
     sp = sub.add_parser("watch-add")
     sp.add_argument("keyword")
     sp.add_argument("--competitor", default="")
@@ -248,6 +254,14 @@ def main():
             print(value.render_markdown(value.value_report(args.openseo_hosted)))
         else:
             _out(value.value_report(args.openseo_hosted), full=True)
+    elif cmd == "preferred":
+        from . import preferred
+
+        _out(preferred.audit(args.url or None), full=True)
+    elif cmd == "preferred-btn":
+        from . import preferred
+
+        _out(preferred.embed_snippet(args.theme, args.lang or None, args.mode), full=True)
     elif cmd == "geo":
         from . import geo
 

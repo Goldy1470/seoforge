@@ -41,6 +41,17 @@ local-mumbai — edit for your site):
 Commands: `python -m seoforge.cli aeo ai-seo` · `aeo-matrix` · `llms-full` (write results to
 `/llms-full.txt`) · MCP: `aeo_funnel`, `aeo_matrix`, `value_vs_semrush`.
 
+## Google Preferred Sources — why this lever (and how the module runs it)
+
+People pick you once in `Search personalization → Source preferences`, and your links get a
+**Preferred** badge in *Top Stories, AI Overviews and AI Mode* for that user — Google says those
+readers click ~2× more. Any site that publishes fresh content is eligible; only domain-level
+/subdomain properties show up in the tool; and you must be included in **Search generative AI
+features** in Search Console. `python -m seoforge.cli preferred` audits all three, checks
+whether the official button is already on your home page, and hands you the exact embeds
+(`preferred_sources_button`) — Google's `publisher.js` + `google-add-preferred-source-btn`
+div, light/dark, localized. Put it in article footers / the homepage.
+
 ## Why it beats a $140/mo suite (run `value_vs_semrush` / `value --markdown`)
 
 16-module coverage matrix + cost model: Semrush Pro $139.95/mo → SEOForge stack
@@ -99,6 +110,7 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Live OpenSEO | `openseo.py` | hosted-MCP / API-key / self-host modes, setup commands, 12-skill bridge |
 | AEO/GEO funnel | `aeo.py` | found → answered → cited → recommended → chosen, category-wise scores + fixes, llms-full.txt |
 | Value vs Semrush | `value.py` | 16-module coverage matrix + $139.95 vs stack cost counter |
+| **Google Preferred Sources** (the 2026 sleeper) | `preferred.py` | eligibility audit (fresh content, domain property, SGEA-in-GSC) + official `Add to Preferred Sources` button embeds — badges in Top Stories **and** AI Overviews/AI Mode, ~2× CTR |
 | AI-citation test | `geo.py` | ask a frontier LLM your buying questions, count brand/domain citations (the guide's experiment) |
 | Page scaffolds | `paa.py` | one markdown brief + FAQPage JSON-LD per question page for your agent to fill |
 | Orchestration | `orchestrator.py` | `seo_audit`, `content_plan`, `link_building_plan`, `full_pipeline` |
@@ -164,6 +176,9 @@ python -m seoforge.cli opps-refresh
 python -m seoforge.cli delta                      # GSC movers now (also refreshes queue + digest)
 python -m seoforge.cli schedule-status
 python -m seoforge.cli schedule --all             # run every job now; --daemon runs the loop
+python -m seoforge.cli value                        # $139.95 Semrush vs your stack
+python -m seoforge.cli preferred                    # Google Preferred Sources audit + checklist
+python -m seoforge.cli preferred-btn --theme dark   # official "Add to Preferred Sources" button code
 python -m seoforge.cli geo                        # AI-readiness score + GPTBot FAQ test
 python -m seoforge.cli serve                      # dashboard http://127.0.0.1:8808
 python -m seoforge.cli mcp                        # run MCP server for Codex/ChatGPT (stdio)
@@ -183,6 +198,7 @@ python -m seoforge.cli mcp                        # run MCP server for Codex/Cha
 - [x] v0.1 — all modules as a working scaffold (29 MCP tools)
 - [x] v0.2 — cross-source opportunity engine, scheduler + nightly GSC delta, keyword watch, digests (46 tools)
 - [x] v0.3 — live OpenSEO (hosted/key/self-host), AEO funnel per category, llms-full.txt, Semrush value counter (54 tools)
+- [x] v0.4 — Google Preferred Sources: eligibility audit + official button embed code (56 tools)
 - [ ] JS-rendered crawl mode for SPA/Next sites via playwright
 - [ ] content generator: draft the question pages (title/H2/FAQ JSON-LD) with your LLM of choice
 - [ ] OpenAI-keyed AI-citation daily trend (citation position tracking in the funnel)
