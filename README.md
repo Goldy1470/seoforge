@@ -111,6 +111,7 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | AEO/GEO funnel | `aeo.py` | found → answered → cited → recommended → chosen, category-wise scores + fixes, llms-full.txt |
 | Value vs Semrush | `value.py` | 16-module coverage matrix + $139.95 vs stack cost counter |
 | **Google Preferred Sources** (the 2026 sleeper) | `preferred.py` | eligibility audit (fresh content, domain property, SGEA-in-GSC) + official `Add to Preferred Sources` button embeds — badges in Top Stories **and** AI Overviews/AI Mode, ~2× CTR |
+| **Keyword-research playbook** (the 6 rules) | `research.py` | 1 audience problems (their words: GSC+PAA) → 2 broad seeds → 3 one-tool policy (never mix difficulty scores) → 4 intent (teach/compare/sell → page type) → 5 numbers (page / needs-edge / skip) → 6 clusters (one page per group, never compete with yourself) |
 | AI-citation test | `geo.py` | ask a frontier LLM your buying questions, count brand/domain citations (the guide's experiment) |
 | Page scaffolds | `paa.py` | one markdown brief + FAQPage JSON-LD per question page for your agent to fill |
 | Orchestration | `orchestrator.py` | `seo_audit`, `content_plan`, `link_building_plan`, `full_pipeline` |
@@ -179,6 +180,12 @@ python -m seoforge.cli schedule --all             # run every job now; --daemon 
 python -m seoforge.cli value                        # $139.95 Semrush vs your stack
 python -m seoforge.cli preferred                    # Google Preferred Sources audit + checklist
 python -m seoforge.cli preferred-btn --theme dark   # official "Add to Preferred Sources" button code
+python -m seoforge.cli research                     # full 6-rule keyword-research playbook, saved as report
+python -m seoforge.cli problems                     # what customers search, in their words (GSC+PAA+drills)
+python -m seoforge.cli seeds --products "amazon marketing agency"
+python -m seoforge.cli intent "best crm for d2c"    # do the SERP results teach, compare or sell?
+python -m seoforge.cli worth "crm for d2c" "email marketing pricing"   # page / needs-edge / skip
+python -m seoforge.cli groups                       # cluster keywords so nobody competes with you
 python -m seoforge.cli geo                        # AI-readiness score + GPTBot FAQ test
 python -m seoforge.cli serve                      # dashboard http://127.0.0.1:8808
 python -m seoforge.cli mcp                        # run MCP server for Codex/ChatGPT (stdio)
@@ -199,6 +206,7 @@ python -m seoforge.cli mcp                        # run MCP server for Codex/Cha
 - [x] v0.2 — cross-source opportunity engine, scheduler + nightly GSC delta, keyword watch, digests (46 tools)
 - [x] v0.3 — live OpenSEO (hosted/key/self-host), AEO funnel per category, llms-full.txt, Semrush value counter (54 tools)
 - [x] v0.4 — Google Preferred Sources: eligibility audit + official button embed code (56 tools)
+- [x] v0.5 — keyword-research playbook: audience problems, seeds, one-tool policy, SERP intent (teach/compare/sell), volume+competition+trend verdicts, keyword clustering (63 tools)
 - [ ] JS-rendered crawl mode for SPA/Next sites via playwright
 - [ ] content generator: draft the question pages (title/H2/FAQ JSON-LD) with your LLM of choice
 - [ ] OpenAI-keyed AI-citation daily trend (citation position tracking in the funnel)

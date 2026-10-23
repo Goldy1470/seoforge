@@ -21,6 +21,18 @@ def _dfs_client() -> httpx.AsyncClient:
     )
 
 
+def _trend(monthly: list | None) -> str | None:
+    vols = [(m.get("search_volume") or 0) for m in (monthly or []) if isinstance(m, dict)]
+    if len(vols) < 6:
+        return None
+    recent = sum(vols[:3]) / 3
+    older = sum(vols[3:]) / max(len(vols) - 3, 1)
+    if not older:
+        return None
+    change = (recent - older) / older
+    return "up" if change > 0.15 else "down" if change < -0.15 else "flat"
+
+
 async def keyword_suggestions(keyword: str, location: int | None = None) -> list[dict]:
     async with _dfs_client() as c:
         r = await c.post(
@@ -51,6 +63,7 @@ async def keyword_suggestions(keyword: str, location: int | None = None) -> list
                 "cpc": info.get("cpc"),
                 "difficulty": it.get("serp_info", {}).get("ranked_organic_metrics", {}).get("etv")
                 or it.get("competitive_rate"),
+                "monthly_trend": _trend(info.get("monthly_searches")),
             }
         )
     return out

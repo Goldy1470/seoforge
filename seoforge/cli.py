@@ -102,6 +102,18 @@ def main():
     sp.add_argument("--theme", default="light", choices=["light", "dark"])
     sp.add_argument("--lang", default="")
     sp.add_argument("--mode", default="standard", choices=["standard", "manual", "esm"])
+    sp = sub.add_parser("research")
+    sp.add_argument("--products", nargs="*")
+    sp = sub.add_parser("problems")
+    sp.add_argument("--products", nargs="*")
+    sp = sub.add_parser("seeds")
+    sp.add_argument("--products", nargs="*")
+    sp = sub.add_parser("intent")
+    sp.add_argument("keyword")
+    sp = sub.add_parser("worth")
+    sp.add_argument("keywords", nargs="+")
+    sp = sub.add_parser("groups")
+    sp.add_argument("keywords", nargs="*")
     sp = sub.add_parser("watch-add")
     sp.add_argument("keyword")
     sp.add_argument("--competitor", default="")
@@ -262,6 +274,30 @@ def main():
         from . import preferred
 
         _out(preferred.embed_snippet(args.theme, args.lang or None, args.mode), full=True)
+    elif cmd == "research":
+        from . import research
+
+        _out(research.workflow(args.products), full=True)
+    elif cmd == "problems":
+        from . import research
+
+        _out(research.audience_problems(args.products), full=True)
+    elif cmd == "seeds":
+        from . import research
+
+        _out(research.seed_ideas(args.products), full=True)
+    elif cmd == "intent":
+        from . import research
+
+        _out(research.check_intent(args.keyword), full=True)
+    elif cmd == "worth":
+        from . import research
+
+        _out(research.worth_a_page(args.keywords), full=True)
+    elif cmd == "groups":
+        from . import research
+
+        _out(research.group_keywords(args.keywords or None), full=True)
     elif cmd == "geo":
         from . import geo
 

@@ -231,6 +231,62 @@ def value_vs_semrush(openseo_hosted: bool = False, markdown: bool = False) -> di
 
 
 @mcp.tool()
+def research_provider() -> dict:
+    """Rule 3 - use ONE keyword tool: which one seoforge is wired to, and why never to mix difficulty scores."""
+    from . import research
+
+    return research.provider()
+
+
+@mcp.tool()
+def audience_problems(products: list = [], limit: int = 40) -> dict:
+    """Rule 1 - problems your customers search about, in their words: real GSC queries + PAA + category drills."""
+    from . import research
+
+    return research.audience_problems(list(products), limit)
+
+
+@mcp.tool()
+def seed_ideas(products: list = []) -> dict:
+    """Rule 2 - broad seed keywords built from how a customer would describe what you sell."""
+    from . import research
+
+    return research.seed_ideas(list(products))
+
+
+@mcp.tool()
+def intent_check(keyword: str) -> dict:
+    """Rule 4 - live SERP intent: do the ranking results teach, compare or sell -> which page type to build."""
+    from . import research
+
+    return research.check_intent(keyword)
+
+
+@mcp.tool()
+def keyword_worth(keywords: list) -> dict:
+    """Rule 5 - volume/competition/trend per keyword: page, needs-edge, skip or unknown."""
+    from . import research
+
+    return research.worth_a_page(list(keywords))
+
+
+@mcp.tool()
+def keyword_groups(keywords: list = []) -> dict:
+    """Rule 6 - cluster similar keywords so one page targets one cluster (never compete with yourself)."""
+    from . import research
+
+    return research.group_keywords(list(keywords) or None)
+
+
+@mcp.tool()
+def keyword_research_workflow(products: list = []) -> dict:
+    """Full 6-rule keyword research pass (audience/seeds/one-tool/intent/numbers/groups), saved as a report."""
+    from . import research
+
+    return research.workflow(list(products) or None)
+
+
+@mcp.tool()
 def paa_tree(seeds: list[str], max_depth: int = 2) -> dict:
     """Expand People Also Ask boxes into a question tree (how/what/best/vs)."""
     from . import paa
