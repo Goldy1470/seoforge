@@ -80,9 +80,11 @@ def _parse_page(url: str, text: str, base: str) -> dict:
     robots_tag = soup.find("meta", attrs={"name": "robots"})
     canonical = soup.find("link", rel="canonical")
     h1 = " | ".join(h.get_text(" ", strip=True) for h in soup.find_all("h1")[:2])
+    headings = [h.get_text(" ", strip=True) for h in soup.find_all(["h2", "h3"])][:10]
     for tag in soup(["script", "style", "noscript", "svg"]):
         tag.decompose()
     text = soup.get_text(" ", strip=True)
+    first_text = text[:400]
     links = []
     for a in soup.find_all("a", href=True):
         href = urljoin(base, a.get("href", "")).split("#")[0]
@@ -114,6 +116,8 @@ def _parse_page(url: str, text: str, base: str) -> dict:
             urljoin(base, canonical.get("href", "")).split("#")[0] if canonical else ""
         ),
         "h1": h1,
+        "headings": headings,
+        "first_text": first_text,
         "word_count": len(text.split()),
         "links": links,
         "images_missing_alt": missing_alt,
@@ -249,8 +253,8 @@ def _norm_text(s: str) -> str:
 
 SQL_UPSERT_PAGE = """INSERT INTO pages(job_id,url,status,depth,title,meta_desc,h1,canonical,
    meta_robots,word_count,links_out,response_ms,size_bytes,jsonld,
-   images_missing_alt,harvested_at)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+   images_missing_alt,headings,first_text,harvested_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
    ON CONFLICT(url) DO UPDATE SET
      job_id=excluded.job_id, status=excluded.status, depth=excluded.depth,
      title=excluded.title, meta_desc=excluded.meta_desc, h1=excluded.h1,
@@ -258,6 +262,7 @@ SQL_UPSERT_PAGE = """INSERT INTO pages(job_id,url,status,depth,title,meta_desc,h
      word_count=excluded.word_count, links_out=excluded.links_out,
      response_ms=excluded.response_ms, size_bytes=excluded.size_bytes,
      jsonld=excluded.jsonld, images_missing_alt=excluded.images_missing_alt,
+     headings=excluded.headings, first_text=excluded.first_text,
      harvested_at=excluded.harvested_at"""
 
 
@@ -283,6 +288,8 @@ def _persist(job_id: str, pages: dict, edges, summary: dict) -> None:
                     r.get("size_bytes"),
                     json.dumps(r.get("jsonld")),
                     r.get("images_missing_alt"),
+                    json.dumps(r.get("headings")),
+                    r.get("first_text"),
                     stamp,
                 ),
             )

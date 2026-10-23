@@ -287,6 +287,22 @@ def keyword_research_workflow(products: list = []) -> dict:
 
 
 @mcp.tool()
+def onpage_audit(url: str = "") -> dict:
+    """Six-rule on-page audit per crawled page: title phrase+length, meta why-beats, question headings, first-sentence answer, alt text, title-matched anchors."""
+    from . import onpage
+
+    return onpage.audit(url or None)
+
+
+@mcp.tool()
+def onpage_pack(query: str, usp: str = "") -> dict:
+    """One query -> six-rule-compliant on-page block: title (<=60), meta (<=155), question headings, first line, image alt, internal links."""
+    from . import onpage
+
+    return onpage.fix_pack(query, usp)
+
+
+@mcp.tool()
 def paa_tree(seeds: list[str], max_depth: int = 2) -> dict:
     """Expand People Also Ask boxes into a question tree (how/what/best/vs)."""
     from . import paa

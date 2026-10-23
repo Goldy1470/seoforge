@@ -114,6 +114,11 @@ def main():
     sp.add_argument("keywords", nargs="+")
     sp = sub.add_parser("groups")
     sp.add_argument("keywords", nargs="*")
+    sp = sub.add_parser("onpage")
+    sp.add_argument("url", nargs="?")
+    sp = sub.add_parser("onpage-pack")
+    sp.add_argument("query")
+    sp.add_argument("--usp", default="")
     sp = sub.add_parser("watch-add")
     sp.add_argument("keyword")
     sp.add_argument("--competitor", default="")
@@ -298,6 +303,14 @@ def main():
         from . import research
 
         _out(research.group_keywords(args.keywords or None), full=True)
+    elif cmd == "onpage":
+        from . import onpage
+
+        _out(onpage.audit(args.url or None), full=True)
+    elif cmd == "onpage-pack":
+        from . import onpage
+
+        _out(onpage.fix_pack(args.query, args.usp), full=True)
     elif cmd == "geo":
         from . import geo
 

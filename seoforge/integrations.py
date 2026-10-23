@@ -329,6 +329,12 @@ def recompute(include_volume: bool = True, persist: bool = True) -> dict:
     items += _internal_orphans()
     items += _noindex_in_sitemap()
     items += _cwv_slow()
+    try:
+        from . import onpage
+
+        items += onpage.opportunities()
+    except Exception:
+        pass
     items += _backlink_directories()
     items += _ai_visibility_gap()
 

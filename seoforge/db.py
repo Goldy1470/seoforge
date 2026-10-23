@@ -153,6 +153,14 @@ def get_db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    for stmt in (
+        "ALTER TABLE pages ADD COLUMN headings TEXT",
+        "ALTER TABLE pages ADD COLUMN first_text TEXT",
+    ):
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass
     return conn
 
 
