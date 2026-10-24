@@ -91,6 +91,7 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Area | Module | Key tools |
 |---|---|---|
 | Technical crawl (Screaming Frog-style) | `crawler.py` | `crawl_site`, titles/metas/canonicals/dups/speed/JSON-LD, sitemap seeding |
+| SSRF-safe fetching (all user URLs) | `safe_fetch.py` | every page/robots/sitemap fetch goes through public-address checks + DNS pinning + redirect re-validation + size/time caps (`SEOFORGE_ALLOW_PRIVATE_FETCH` for local dev only) |
 | Google Search Console | `gsc.py` | striking-distance queries (pos 5–20), cannibalization, low CTR, URL inspection |
 | SERP + keyword data | `keywords.py` | DataForSEO SERP/PAA/keyword-ideas/backlinks, OpenSEO passthrough |
 | **PAA → question pages** (the highprimeco method — PAA box as a build list) | `paa.py` | `paa_tree`, `question_page_plan`, CSV export to build pages like `/free-guides` |

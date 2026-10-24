@@ -5,8 +5,10 @@ import asyncio
 import json
 from pathlib import Path
 
-from . import backlinks, crawler, db, facets, gsc, internal_links, keywords, merchant, paa
+from . import backlinks, crawler, db, facets, gsc, internal_links, keywords, merchant, paa, safe_fetch
 from .config import settings
+
+import sys
 
 
 def _out(o, full=False):
@@ -148,7 +150,11 @@ def main():
 
     cmd = args.cmd
     if cmd == "crawl":
-        _out(asyncio.run(crawler.crawl_site(args.url)))
+        try:
+            _out(asyncio.run(crawler.crawl_site(args.url)))
+        except safe_fetch.FetchError as e:
+            print(f"refused: {e.code} - {e}", file=sys.stderr)
+            raise SystemExit(2)
     elif cmd == "audit":
         from . import orchestrator
 

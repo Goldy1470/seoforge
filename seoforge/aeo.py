@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from . import db, geo
+from . import db, geo, safe_fetch
 from .config import ROOT, settings
 
 CAT_FILE = ROOT / "data" / "aeo_categories.json"
@@ -73,8 +73,8 @@ def _live_pages(category: dict, limit: int = 6) -> list[str]:
 
 def _fetch(url: str) -> str | None:
     try:
-        r = httpx.get(url, headers={"User-Agent": "GPTBot"}, timeout=25, follow_redirects=True)
-        return r.text if r.status_code == 200 else None
+        r = safe_fetch.fetch_sync(url, accept=None, truncate=True, timeout=25)
+        return r.text if r.status == 200 else None
     except Exception:
         return None
 
@@ -99,8 +99,8 @@ def stage_found(site: str | None = None) -> dict:
     ten_sec = checks.get("ten_second_test", {}).get("pages", {})
     rendered = [t for t in ten_sec.values() if t.get("server_rendered")]
     try:
-        r = httpx.get(urljoin(site, "/llms-full.txt"), timeout=15)
-        llms_full = r.status_code == 200
+        r = safe_fetch.fetch_sync(urljoin(site, "/llms-full.txt"), accept=None, truncate=True, timeout=15)
+        llms_full = r.status == 200
     except Exception:
         llms_full = False
     score = round(

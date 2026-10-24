@@ -70,6 +70,66 @@ cloned read-only to `../ansvisor`. Nothing there is edited.
 - pyproject had remained at `version = 0.1.0` while the README product is
   v0.7 (72 tools) — bumped to 0.8.0 at the start of the port series.
 
+## Phase 1 (SSRF-safe fetching) — COMPLETE
+
+### What landed
+- `seoforge/safe_fetch.py`: blocklist mirrors the reference (IPv4 RFC 6890 set
+  + IPv6 transition ranges; IPv4-mapped IPv6 evaluated as its IPv4 value);
+  `is_public_address` = blocklist ∧ `ipaddress.is_global`; `check_url`
+  (http/https, no credentials, standard ports, public IP literals,
+  localhost refused); `fetch()` validates every resolved address and pins the
+  request to a validated one (URL host swapped to the IP, real `Host` header,
+  `sni_hostname` extension so TLS/SNI + certificate verification use the real
+  name), follows ≤5 redirects by hand re-checking every hop, streams the body
+  with a 3 MiB cap (truncate mode optional), overall deadline via
+  `asyncio.timeout`; typed `FetchError` codes exactly the plan's eight.
+- `SEOFORGE_ALLOW_PRIVATE_FETCH` (env-only, default false): bypasses the
+  public-address checks for local dev; documented in `.env.example` (empty).
+  No MCP tool or dashboard route touches the environment.
+- Routed through safe fetch: crawler (robots, sitemaps, every page),
+  `geo.check_ai_readiness` (robots/llms/sitemap/FAQ pages), `aeo._fetch`
+  (GPTBot-UA fetch + llms-full probe), `indexing` (sitemap walker + robots
+  probe), `preferred` (sitemap probe + homepage). CLI `crawl` exits 2 with a
+  friendly message; MCP `crawl_site` returns `{"error": code, "message": …}`.
+
+### Discrepancies / deviations (code over plan)
+- **Plan assumed geo.py/aeo.py/perf.py/technical.py/indexing.py/onpage.py/
+  preferred.py all fetch user URLs.** Grepping the real code:
+  `technical.py`/`onpage.py` are DB-rule modules with no direct fetches;
+  `perf.py` (PageSpeed), `gsc.py` (Google endpoints), `keywords.py`
+  (DataForSEO), `indexnow`/google-ping (fixed hosts), `notify.py`
+  (operator-configured Slack webhook) are **fixed vendor endpoints** and stay
+  direct httpx — per plan section 4's carve-out.
+- **Carrier clients remain**: crawler/geo still construct their own
+  `AsyncClient` (also the transport-injection seam for tests); every request
+  on those clients is issued by `safe_fetch.fetch`.
+- **DNS pinning needs a resolver injection in tests**: the crawler's mock
+  transport cannot satisfy real `getaddrinfo` for fake hosts, so
+  `crawl_site(..., transport=…, resolver=…)` threads a resolver into
+  `safe_fetch.fetch` (mirrors the JS `lookup` test hook). Production keeps
+  real pinning.
+- **Content-type gate NOT applied to crawler/sitemap/robots fetches**
+  (`accept=None`): those legitimately come in different/absent content types
+  (the HTML decision is made by the crawl logic, same as before); `safe_fetch`
+  still applies SSRF + size/time caps. The gate is active for
+  `preferred.audit` (HTML required).
+- **Crawler trade-offs recorded**: one DNS resolution per page (could be
+  cached later); page bodies over 3 MiB are truncated into the stored row
+  instead of persisted whole (bounded memory ≥ correctness trade, noted);
+  `http_error` pages are stored with their HTTP status (parity with the old
+  `follow_redirects=True` behaviour); blocked/unreachable pages store -1.
+- **Verification caveat to watch**: `sni_hostname` support by httpcore is the
+  load-bearing assumption for HTTPS pinning (docs say it drives SNI *and*
+  certificate verification). The offline mock tests can't prove TLS; the
+  first live Phase 2 fetch (AI-bot IP-range JSON) should be treated as the
+  smoke test — record a failure here if cert verification breaks.
+- `fetch_sync` added for the sync call paths in aeo/preferred (must not be
+  called inside a running loop).
+
+### Toolchain
+- Suite: 102 tests passing offline (45 new in `tests/test_safe_fetch.py`,
+  8 in `tests/test_crawler.py` including the two refusal acceptance tests).
+
 ## Open questions for the human (plan §12 — still pending)
 - (Phase 6) scraper-backed provider for consumer AI surfaces — cost + ToS review.
 - (Phase 7) Postgres before first paying customers vs SQLite closed beta.

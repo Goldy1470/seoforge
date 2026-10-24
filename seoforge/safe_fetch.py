@@ -308,3 +308,11 @@ async def _read_body(resp, final_url, status, accept, max_bytes, truncate) -> Fe
         content_type=content_type,
         truncated=truncated,
     )
+
+
+def fetch_sync(url: str, **kwargs) -> FetchResult:
+    """Sync wrapper over fetch() for modules in synchronous call paths.
+
+    Must not be called from inside a running event loop.
+    """
+    return asyncio.run(fetch(url, **kwargs))

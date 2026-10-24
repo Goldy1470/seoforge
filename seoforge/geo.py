@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 import httpx
 
 from . import db
+from . import safe_fetch
 from .config import settings
 
 AI_BOTS = [
@@ -24,10 +25,14 @@ FAQ_TEST_UA = "GPTBot"
 
 
 async def _get(client: httpx.AsyncClient, url: str, allow_fail=True):
+    """Safe fetch: SSRF checks + caps on every user URL.
+
+    Returns None on any rejected/failed fetch (same contract as before).
+    `allow_fail` is kept for API compatibility; failures always map to None.
+    """
     try:
-        r = await client.get(url, follow_redirects=True)
-        return r
-    except Exception:
+        return await safe_fetch.fetch(url, accept=None, client=client, truncate=True, timeout=25)
+    except safe_fetch.FetchError:
         return None
 
 
@@ -43,7 +48,7 @@ async def check_ai_readiness(site: str | None = None) -> dict:
         headers={"User-Agent": FAQ_TEST_UA}, timeout=30, follow_redirects=True
     ) as c:
         robots = await _get(c, urljoin(origin, "/robots.txt"))
-        robots_text = robots.text if robots is not None and robots.status_code == 200 else ""
+        robots_text = robots.text if robots is not None and robots.status == 200 else ""
         sections = _parse_robots(robots_text)
         result["checks"]["robots_ai_agents"] = {}
         for bot in AI_BOTS:
@@ -58,13 +63,13 @@ async def check_ai_readiness(site: str | None = None) -> dict:
         result["robots_txt_found"] = bool(robots_text)
         llms = await _get(c, urljoin(origin, "/llms.txt"))
         result["checks"]["llms_txt"] = {
-            "present": llms is not None and llms.status_code == 200,
+            "present": llms is not None and llms.status == 200,
             "size": len(llms.text) if llms is not None else 0,
-            "preview": (llms.text[:200] if llms is not None and llms.status_code == 200 else ""),
+            "preview": (llms.text[:200] if llms is not None and llms.status == 200 else ""),
         }
         sitemap = await _get(c, urljoin(origin, "/sitemap.xml"))
         result["checks"]["sitemap_xml"] = {
-            "present": sitemap is not None and sitemap.status_code == 200 and "urlset" in (sitemap.text or "")
+            "present": sitemap is not None and sitemap.status == 200 and "urlset" in (sitemap.text or "")
         }
         with db._conn() as conn:
             faq_pages = conn.execute(
@@ -78,7 +83,7 @@ async def check_ai_readiness(site: str | None = None) -> dict:
             text = r.text
             visible_text_length = _visible_text_length(text)
             ten_sec[row["url"]] = {
-                "status": r.status_code,
+                "status": r.status,
                 "raw_html_chars": len(text),
                 "server_rendered": visible_text_length > 500,
                 "faq_jsonld_present": '"@type": "FAQPage"' in text or '"@type":"FAQPage"' in text,
