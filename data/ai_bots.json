@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "changes": [
+    {
+      "version": 1,
+      "date": "2026-10-24",
+      "summary": "SEOForge AI-bot registry: OpenAI, Anthropic and Perplexity training crawlers, search crawlers and user fetchers, each verified against the operator's published IP ranges; extended agents tracked for robots coverage without published ranges to verify against."
+    }
+  ],
+  "bots": [
+    {
+      "key": "gptbot",
+      "name": "GPTBot",
+      "operator": "OpenAI",
+      "type": "training",
+      "userAgent": "GPTBot",
+      "ranges": "https://openai.com/gptbot.json",
+      "verified": true
+    },
+    {
+      "key": "oai-searchbot",
+      "name": "OAI-SearchBot",
+      "operator": "OpenAI",
+      "type": "search",
+      "userAgent": "OAI-SearchBot",
+      "ranges": "https://openai.com/searchbot.json",
+      "verified": true
+    },
+    {
+      "key": "chatgpt-user",
+      "name": "ChatGPT-User",
+      "operator": "OpenAI",
+      "type": "user",
+      "userAgent": "ChatGPT-User",
+      "ranges": "https://openai.com/chatgpt-user.json",
+      "verified": true
+    },
+    {
+      "key": "claudebot",
+      "name": "ClaudeBot",
+      "operator": "Anthropic",
+      "type": "training",
+      "userAgent": "ClaudeBot",
+      "ranges": "https://claude.com/crawling/bots.json",
+      "verified": true
+    },
+    {
+      "key": "claude-searchbot",
+      "name": "Claude-SearchBot",
+      "operator": "Anthropic",
+      "type": "search",
+      "userAgent": "Claude-SearchBot",
+      "ranges": "https://claude.com/crawling/bots.json",
+      "verified": true
+    },
+    {
+      "key": "claude-user",
+      "name": "Claude-User",
+      "operator": "Anthropic",
+      "type": "user",
+      "userAgent": "Claude-User",
+      "ranges": "https://claude.com/crawling/bots.json",
+      "verified": true
+    },
+    {
+      "key": "perplexitybot",
+      "name": "PerplexityBot",
+      "operator": "Perplexity",
+      "type": "search",
+      "userAgent": "PerplexityBot",
+      "ranges": "https://www.perplexity.com/perplexitybot.json",
+      "verified": true
+    },
+    {
+      "key": "perplexity-user",
+      "name": "Perplexity-User",
+      "operator": "Perplexity",
+      "type": "user",
+      "userAgent": "Perplexity-User",
+      "ranges": "https://www.perplexity.com/perplexity-user.json",
+      "verified": true
+    },
+    {
+      "key": "anthropic-ai",
+      "name": "anthropic-ai",
+      "operator": "Anthropic",
+      "type": "user",
+      "userAgent": "anthropic-ai",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "google-extended",
+      "name": "Google-Extended",
+      "operator": "Google",
+      "type": "training",
+      "userAgent": "Google-Extended",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "gemini-deep-research",
+      "name": "Gemini-Deep-Research",
+      "operator": "Google",
+      "type": "user",
+      "userAgent": "Gemini-Deep-Research",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "ccbot",
+      "name": "CCBot",
+      "operator": "Common Crawl",
+      "type": "training",
+      "userAgent": "CCBot",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "applebot-extended",
+      "name": "Applebot-Extended",
+      "operator": "Apple",
+      "type": "training",
+      "userAgent": "Applebot-Extended",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "meta-externalagent",
+      "name": "meta-externalagent",
+      "operator": "Meta",
+      "type": "training",
+      "userAgent": "meta-externalagent",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "mistralai-user",
+      "name": "MistralAI-User",
+      "operator": "Mistral AI",
+      "type": "user",
+      "userAgent": "MistralAI-User",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "youbot",
+      "name": "YouBot",
+      "operator": "You.com",
+      "type": "search",
+      "userAgent": "YouBot",
+      "ranges": null,
+      "verified": false
+    },
+    {
+      "key": "cohere-ai",
+      "name": "cohere-ai",
+      "operator": "Cohere",
+      "type": "training",
+      "userAgent": "cohere-ai",
+      "ranges": null,
+      "verified": false
+    }
+  ]
+}

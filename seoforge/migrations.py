@@ -187,6 +187,18 @@ def _parse_columns(schema_sql: str) -> dict:
 _PARSED_V1 = _parse_columns(_SCHEMA)
 
 
+def _v2_ai_bot_ranges(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+CREATE TABLE IF NOT EXISTS ai_bot_ranges (
+  url TEXT PRIMARY KEY,
+  prefixes_json TEXT NOT NULL,
+  fetched_at REAL NOT NULL
+);
+"""
+    )
+
+
 def _table_columns(conn: sqlite3.Connection, table: str) -> set:
     return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 
@@ -206,6 +218,7 @@ def _v1_initial_schema(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS: list = [
     (1, "initial schema (pages + crawl engine tables)", _v1_initial_schema),
+    (2, "ai_bot_ranges cache for AI-operator published IP ranges", _v2_ai_bot_ranges),
 ]
 
 

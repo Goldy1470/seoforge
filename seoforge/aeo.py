@@ -9,15 +9,13 @@ from urllib.parse import urljoin
 
 import httpx
 
-from . import db, geo, safe_fetch
+from . import ai_bots, db, geo, safe_fetch
 from .config import ROOT, settings
 
 CAT_FILE = ROOT / "data" / "aeo_categories.json"
-AI_AGENTS_EXTENDED = [
-    "GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-User", "Claude-SearchBot",
-    "anthropic-ai", "PerplexityBot", "Perplexity-User", "Google-Extended", "Gemini-Deep-Research",
-    "CCBot", "Applebot-Extended", "meta-externalagent", "MistralAI-User", "YouBot", "cohere-ai",
-]
+# Derived from the registry in data/ai_bots.json (which is the source of truth);
+# the alias stays so existing imports keep working.
+AI_AGENTS_EXTENDED = [b.userAgent for b in ai_bots.all_bots()]
 
 ANSWER_SENTENCE = re.compile(r"\b(is|are|means|refers to|works by)\b")
 PRICE_HINT = re.compile(r"(₹|\$|pricing|price|plans? start|book a call|get a quote)", re.I)
@@ -94,6 +92,8 @@ def stage_found(site: str | None = None) -> dict:
     checks = geox.get("checks", {})
     robots = checks.get("robots_ai_agents", {})
     named = sum(1 for b in robots.values() if b.get("explicitly_named"))
+    registry = ai_bots.all_bots()
+    total = max(len(registry), 1)
     llms = checks.get("llms_txt", {}).get("present", False)
     sitemap = checks.get("sitemap_xml", {}).get("present", False)
     ten_sec = checks.get("ten_second_test", {}).get("pages", {})
@@ -105,26 +105,45 @@ def stage_found(site: str | None = None) -> dict:
         llms_full = False
     score = round(
         100 * (
-            (named / max(len(AI_AGENTS_EXTENDED), 1)) * 25
+            (named / total) * 25
             + 20 * llms
             + 10 * llms_full
             + 15 * sitemap
             + 30 * (len(rendered) / max(len(ten_sec), 1) if ten_sec else 0)
         )
     )
+    by_type = checks.get("robots_by_type", {})
+    unnamed = [ua for ua, e in robots.items() if not e.get("explicitly_named")]
+    training_blocked = by_type.get("training", {}).get("site_blocked", 0)
+    training_total = by_type.get("training", {}).get("total", 0)
+    search_or_user_blocked = (
+        by_type.get("search", {}).get("site_blocked", 0) + by_type.get("user", {}).get("site_blocked", 0)
+    )
+    fixes = []
+    if unnamed:
+        fixes.append(
+            "add explicit robots.txt sections for the unnamed agents ("
+            + ", ".join(unnamed[:4]) + ("..." if len(unnamed) > 4 else "") + ")"
+        )
+    if training_blocked and not search_or_user_blocked and training_total:
+        fixes.append(
+            f"training crawlers blocked ({training_blocked}/{training_total}) while search/user agents are allowed "
+            "- a common deliberate choice; make sure it is one"
+        )
+    fixes.extend([
+        *(["write /llms-full.txt (full markdown corpus for agents)"] if not llms_full else []),
+        *(["self-host / pre-render FAQ blocks - GPTBot only sees raw HTML"] if ten_sec and not rendered else []),
+    ])
     return {
         "stage": "found",
         "score": score,
-        "explicit_bot_sections": f"{named}/{len(AI_AGENTS_EXTENDED)}",
+        "explicit_bot_sections": f"{named}/{total}",
+        "bots_by_type": by_type,
         "llms_txt": llms,
         "llms_full_txt": llms_full,
         "sitemap": sitemap,
         "server_rendered_faqs": f"{len(rendered)}/{len(ten_sec)}",
-        "fixes": [
-            f"add explicit robots.txt sections for the unnamed agents ({AI_AGENTS_EXTENDED[:4][0]}...)",
-            *(["write /llms-full.txt (full markdown corpus for agents)"] if not llms_full else []),
-            *(["self-host / pre-render FAQ blocks - GPTBot only sees raw HTML"] if ten_sec and not rendered else []),
-        ],
+        "fixes": fixes,
     }
 
 

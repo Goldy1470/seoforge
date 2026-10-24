@@ -130,6 +130,112 @@ cloned read-only to `../ansvisor`. Nothing there is edited.
 - Suite: 102 tests passing offline (45 new in `tests/test_safe_fetch.py`,
   8 in `tests/test_crawler.py` including the two refusal acceptance tests).
 
+## Phase 2 (AI-bot + AI-source registries) — COMPLETE
+
+### Task 2.1 — AI-bot registry + range verification (`data/ai_bots.json`, `seoforge/ai_bots.py`)
+- Registry: 17 agents. 8 verified core bots mirroring the reference list
+  (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot,
+  Claude-User, PerplexityBot, Perplexity-User) with the operators' published
+  range URLs (all six checked live), plus the 9 agents SEOForge already
+  tracked in its extended list (anthropic-ai, google-extended,
+  gemini-deep-research, ccbot, applebot-extended, meta-externalagent,
+  mistralai-user, youbot, cohere-ai) as `ranges: null, verified: false`.
+  Registry order == match order.
+- Tolerant range parser: today all three operators' files share the
+  `{creationTime, prefixes: [{ipv4Prefix|ipv6Prefix}]}` shape (verified live);
+  the parser still handles bare arrays, `{ranges|ips|addresses|ipv4|ipv6}`,
+  `prefix|cidr|ip|range` object keys, and skips malformed entries — never
+  assuming one format, per plan.
+- `ai_bot_ranges` SQLite cache (migration 2; schema versions now `[1, 2]`):
+  fresh ≤ 24 h; a failed refresh keeps the last stored list (possibly stale);
+  with nothing ever stored, a negative-cache row (empty prefixes_json)
+  suppresses live retries for `RANGES_RETRY` (5 min) so bursts don't hammer a
+  dead endpoint.
+- Verification reasons mirror the ingest design: `unknown_agent` /
+  `no_ranges` / `unverified_ip` (spoofed UA = UA matched but IP outside the
+  operator's ranges).
+- Wiring: `geo.check_ai_readiness` now iterates the registry (17 tokens),
+  per-bot entries carry `type`/`verified`, and a new `checks.robots_by_type`
+  aggregates `explicitly_named`/`site_blocked` per training|search|user.
+  `aeo.stage_found` scores named/total over the registry, reports
+  `bots_by_type`, the robots fix bullet names the actual unnamed agents (and
+  disappears when all are named), and a note fires when training crawlers are
+  blocked while search/user agents pass (common deliberate choice).
+  `aeo.AI_AGENTS_EXTENDED` and `geo.AI_BOTS` became derived aliases — the
+  registry file is the single source of truth.
+- CLI: `ai-bots` (registry view), `ai-bot-verify "<ua>" <ip>`; MCP tools:
+  `ai_bots_list`, `ai_bot_verify`.
+
+### Task 2.2 — AI-source registry + classifier (`data/ai_sources.json`, `seoforge/ai_sources.py`)
+- Registry: 13 sources, version-3 state — chatgpt.com (hosts incl.
+  chat.openai.com; aliases chatgpt/openai/openai.com; Shopping surface
+  medium=feed), perplexity.ai, claude.ai, gemini.google.com (bard.google.com),
+  copilot.microsoft.com (copilot.com), grok.com, deepseek.com, meta.ai,
+  you.com, phind.com, poe.com, labs.google, bing.com (referrerPath /ck/a,
+  analytics: false, utm: false). Change history rewritten in SEOForge's own
+  words.
+- Semantics ported from `ai-sources.js` + the tracking snippet:
+  `normalize_source` (lower/trim/one leading `www.`); match = exact alias OR
+  host-or-subdomain, never substring; origin-aware counting (`utm: false` /
+  `analytics: false` opt-outs); referrer-first → utm_source fallback order;
+  the Bing referrer gate; `landing_medium` = first `utm_medium` param, name
+  in any case; surface = exact medium, any case ("feed"→shopping,
+  "rss-feed"→not); `ai_source_pattern` RE2 helper for GA4.
+- `classify(referrer, utm_source, utm_medium, landing_url)` returns
+  source + surface + origin, or None (normal outcome).
+- CLI `ai-sources` + `ai-classify`; MCP `ai_sources_list` +
+  `classify_ai_traffic`.
+
+### Discrepancies / decisions (code over plan)
+
+Task 2.1:
+- **geo._score's all-explicitly-named gate became stricter**: populations are
+  now all 17 registry bots (old hard-coded list: 9). The score formula is
+  untouched; the gate's meaning ("every tracked agent has an explicit
+  robots.txt section") must cover everything we track. Recorded here since it
+  changes reported `ai_readiness_score` values.
+- **Stale-keep window simplified**: the JS kept a stale list usable for one
+  further hour after a failed refresh; the port returns the stale list on
+  every failed refresh, gated by the 24 h freshness + 5 min retry window.
+  Strictly more available, simpler to reason about.
+- **Phase 1 TLS caveat resolved**: the first live Phase 2 fetch (manual CLI
+  run `ai-bot-verify "GPTBot/1.2" 203.0.113.9`) pulled OpenAI's real range
+  file through safe_fetch — DNS pinning, SNI + certificate verification and
+  the JSON parse all worked; UA matched, documentation IP correctly outside
+  OpenAI's ranges → `unverified_ip`. The manual run legitimately wrote a
+  production cache row (it is the CLI, not the test suite; `data/*.db` is
+  gitignored).
+- The JS module's in-memory pending-read coordination was not ported: the
+  SQLite cache is the coordination point (idempotent GET + upsert); no
+  consumer double-fetches the same URL within the TTL.
+- Not ported from the reference module: `botUsage`-style aggregation maps —
+  Phase 4 (log ingest) is their real consumer; they will be designed there,
+  over this registry.
+
+Task 2.2:
+- **The Bing gate is a per-source skip at the referrer origin, judged on the
+  RAW referrer string** — the tracking snippet checks
+  `referrer.indexOf(referrerPath) === -1` (substring), not parsed-path
+  equality; ported exactly that way, so `www.bing.com/ck/a?…` counts and
+  `www.bing.com/search?q=…` does not. (An earlier plan sketch suggested
+  path equality — code wins, recorded.)
+- **Alias matching is array membership (exact), not contains-on-string** —
+  the snippet's `e.a.indexOf(x)` reads the array; `not-perplexity` etc. must
+  never match. Locked by tests.
+- **The GA4 ("analytics") origin is ported but intentionally unused by
+  `classify()`** — the on-site classifier is referrer+utm only, exactly like
+  the snippet; the analytics origin (and `ai_source_pattern`) exists for the
+  GA4-sync work in a later phase, where the same table decides what counts.
+- `classify()` accepts the medium as an explicit `utm_medium` argument with
+  the landing URL's own `utm_medium` as fallback — log lines often carry
+  both separately; the snippet itself never sees landing URLs, so this is a
+  Phase-4-shaped extension of the same rule, not a new matching rule.
+
+### Toolchain
+- Suite: 148 tests passing offline — 35 new in `tests/test_ai_bots.py`
+  (fixtures use RFC 5737 / 2001:db8 documentation ranges only) + 14 new in
+  `tests/test_ai_sources.py` (table-driven over every source in the file).
+
 ## Open questions for the human (plan §12 — still pending)
 - (Phase 6) scraper-backed provider for consumer AI surfaces — cost + ToS review.
 - (Phase 7) Postgres before first paying customers vs SQLite closed beta.
