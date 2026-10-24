@@ -54,6 +54,9 @@ def test_directories():
 
 
 def test_internal_links_on_crawl():
+    from tests.conftest import crawl_fixtures
+
+    crawl_fixtures()
     report = internal_links.build_report()
     assert report["pages"] >= 1
 

@@ -5,16 +5,21 @@ import datetime as _dt
 import json
 import re
 import urllib.robotparser as robotparser
-from collections import Counter, deque
+from collections import Counter
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
+import tldextract
 from bs4 import BeautifulSoup
 
 from . import db
 from .config import settings
 
 _R_STATUS_PASS = 200
+
+# Offline configuration: never fetch the live Public Suffix List; always use
+# the snapshot bundled inside the tldextract wheel.
+_TLDX = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
 
 def _norm(url: str) -> str:
@@ -27,11 +32,14 @@ def _host(url: str) -> str:
 
 
 def _registrable(url: str) -> str:
-    host = _host(url)
-    parts = host.split(".")
-    if len(parts) <= 2:
+    """Registrable domain via the Public Suffix List (example.co.uk, not co.uk)."""
+    host = (urlsplit(url).hostname or "").lower()
+    if not host:
         return host
-    return ".".join(parts[-2:])
+    ext = _TLDX(host)
+    if ext.domain and ext.suffix:
+        return f"{ext.domain}.{ext.suffix}"
+    return host
 
 
 async def _load_sitemaps(client: httpx.AsyncClient, origin: str) -> list[str]:
@@ -71,6 +79,27 @@ async def _fetch_robots(client: httpx.AsyncClient, origin: str) -> str:
         return r.text if r.status_code == 200 else ""
     except Exception:
         return ""
+
+
+async def _fetch_robots_object(client: httpx.AsyncClient, origin: str):
+    """Fetch robots.txt via the async client and parse it in-process.
+
+    urllib's RobotFileParser.read() does a blocking, unguarded fetch that
+    stalls the event loop — replaced by parse(lines). Robots gating is
+    disabled (all URLs allowed) when the fetch fails or when
+    SEOFORGE_RESPECT_ROBOTS is false.
+    """
+    if not settings.respect_robots:
+        return None
+    text = await _fetch_robots(client, origin)
+    if not text:
+        return None
+    rp = robotparser.RobotFileParser()
+    try:
+        rp.parse(text.splitlines())
+    except Exception:
+        return None
+    return rp
 
 
 def _parse_page(url: str, text: str, base: str) -> dict:
@@ -159,75 +188,80 @@ async def _fetch(client: httpx.AsyncClient, url: str, rp: robotparser.RobotFileP
     return resp, ms, size
 
 
-async def crawl_site(start_url: str, job_id: str | None = None) -> dict:
+async def crawl_site(start_url: str, job_id: str | None = None, *, transport=None) -> dict:
     start = _norm(start_url or settings.site_url)
     origin = urljoin(start, "/")
     reg_domain = _registrable(start)
     job_id = job_id or db.start_job("crawl", {"start": start})
 
-    sem = asyncio.Semaphore(settings.max_concurrency)
-    rp = robotparser.RobotFileParser()
-    rp.set_url(urljoin(origin, "/robots.txt"))
-    try:
-        rp.read()
-    except Exception:
-        rp = None
+    queue: asyncio.Queue = asyncio.Queue()
+    pages: dict[str, dict] = {}
+    edges: list[tuple[str, str, str]] = []
+    status_counter: Counter = Counter()
+    seen: set = set()
 
     async with httpx.AsyncClient(
         timeout=settings.request_timeout,
         headers={"User-Agent": settings.user_agent},
         verify=True,
         http2=True,
+        transport=transport,
     ) as client:
+        rp = await _fetch_robots_object(client, origin)
         sitemap_urls = await _load_sitemaps(client, origin)
-        queue = deque([(start, 0)])
-        seen = {u for u in sitemap_urls[: settings.max_pages] if _registrable(u) == reg_domain}
-        queue.extendleft((u, 0) for u in reversed(sitemap_urls[: settings.max_pages]))
-        pages: dict[str, dict] = {}
-        edges: list[tuple[str, str, str]] = []
-        status_counter: Counter = Counter()
+
+        for u in [start] + sitemap_urls[: settings.max_pages]:
+            if u not in seen and _registrable(u) == reg_domain:
+                seen.add(u)
+                queue.put_nowait((u, 0))
+
+        def _enqueue(url: str, depth: int) -> None:
+            # len(pages)+qsize is approximate (some items are mid-fetch), so the
+            # cap may overshoot by at most the number of in-flight workers.
+            if (
+                url not in seen
+                and _registrable(url) == reg_domain
+                and len(pages) + queue.qsize() < settings.max_pages
+            ):
+                seen.add(url)
+                queue.put_nowait((url, depth))
 
         async def worker():
-            while queue and len(pages) < settings.max_pages:
-                url, depth = queue.popleft()
-                if url in pages or depth > settings.max_depth:
-                    continue
-                async with sem:
+            while True:
+                url, depth = await queue.get()
+                try:
+                    if url in pages or depth > settings.max_depth or len(pages) >= settings.max_pages:
+                        continue
                     resp, ms, size = await _fetch(client, url, rp)
-                if resp is None:
-                    pages[url] = {"status": -1, "depth": depth}
-                    status_counter["robot-blocked"] += 1
-                    continue
-                status_counter[resp.status_code] += 1
-                rec = {
-                    "status": resp.status_code,
-                    "depth": depth,
-                    "response_ms": ms,
-                    "size_bytes": size,
-                    "final_url": _norm(str(resp.url)),
-                }
-                if (
-                    resp.status_code == _R_STATUS_PASS
-                    and "text/html" in resp.headers.get("content-type", "")
-                ):
-                    rec.update(_parse_page(url, resp.text, str(resp.url)))
-                    rec["links_out"] = len(rec.get("links", []))
-                    for l in rec.get("links", []):
-                        edges.append((url, l["href"], l["anchor"]))
-                        tgt = l["href"]
-                        if (
-                            _registrable(tgt) == reg_domain
-                            and tgt not in pages
-                            and (tgt, depth + 1) not in queue
-                            and len(pages) + len(queue) < settings.max_pages
-                        ):
-                            queue.append((tgt, depth + 1))
-                        if tgt not in seen:
-                            seen.add(tgt)
-                pages[url] = rec
+                    if resp is None:
+                        pages[url] = {"status": -1, "depth": depth}
+                        status_counter["robot-blocked"] += 1
+                        continue
+                    status_counter[resp.status_code] += 1
+                    rec = {
+                        "status": resp.status_code,
+                        "depth": depth,
+                        "response_ms": ms,
+                        "size_bytes": size,
+                        "final_url": _norm(str(resp.url)),
+                    }
+                    if (
+                        resp.status_code == _R_STATUS_PASS
+                        and "text/html" in resp.headers.get("content-type", "")
+                    ):
+                        rec.update(_parse_page(url, resp.text, str(resp.url)))
+                        rec["links_out"] = len(rec.get("links", []))
+                        for l in rec.get("links", []):
+                            edges.append((url, l["href"], l["anchor"]))
+                            _enqueue(l["href"], depth + 1)
+                    pages[url] = rec
+                finally:
+                    queue.task_done()
 
-        await asyncio.gather(*[worker() for _ in range(settings.max_concurrency)])
-
+        tasks = [asyncio.create_task(worker()) for _ in range(max(1, settings.max_concurrency))]
+        await queue.join()
+        for t in tasks:
+            t.cancel()
     summary = _summarize(pages, edges)
     _persist(job_id, pages, edges, summary)
     db.finish_job(job_id, summary)

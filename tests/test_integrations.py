@@ -12,6 +12,9 @@ def setup_function(fn):
 
 
 def test_recompute_persists_and_queue():
+    from seoforge import backlinks
+
+    backlinks.load_directories()  # self-seed so a fresh DB still produces DR-based work
     r = integrations.recompute(persist=True)
     assert r["count"] >= 1
     rows = integrations.queue(limit=5)

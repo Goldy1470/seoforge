@@ -1,0 +1,4 @@
+# Optional browser-agent extras (not required for the core SEO toolchain).
+# Install with: pip install -r requirements-browser.txt
+browser-use>=0.9
+playwright>=1.47

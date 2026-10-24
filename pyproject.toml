@@ -1,12 +1,13 @@
 [project]
 name = "seoforge"
-version = "0.1.0"
+version = "0.8.0"
 description = "End-to-end SEO SaaS + MCP server for Codex/ChatGPT: GSC, crawl, PAA question pages, backlinks, internal linking, faceted nav, review/FAQ schema, Merchant Center, AI-visibility, browser agent."
 requires-python = ">=3.11"
 dependencies = [
     "httpx[http2]>=0.27",
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
+    "tldextract>=5.4",
     "fastmcp>=2.0",
     "fastapi>=0.110",
     "uvicorn>=0.29",
