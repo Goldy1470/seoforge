@@ -110,6 +110,7 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Digests | `notify.py` | Slack webhook or saved report briefs |
 | Live OpenSEO | `openseo.py` | hosted-MCP / API-key / self-host modes, setup commands, 12-skill bridge |
 | AEO/GEO funnel | `aeo.py` | found → answered → cited → recommended → chosen, category-wise scores + fixes, llms-full.txt |
+| **AI-bot registry** (who is really crawling you) | `ai_bots.py` | 17 tracked agents — 8 verified against the operators' published IP ranges (OpenAI, Anthropic, Perplexity), token-boundary UA matching, 24 h SQLite-cached range fetch through the SSRF-safe fetcher; `ai-bots` + `ai-bot-verify` CLI, `ai_bots_list` + `ai_bot_verify` MCP tools; per-type robots access (training vs search vs user) feeds the found-stage |
 | Value vs Semrush | `value.py` | 16-module coverage matrix + $139.95 vs stack cost counter |
 | **Google Preferred Sources** (the 2026 sleeper) | `preferred.py` | eligibility audit (fresh content, domain property, SGEA-in-GSC) + official `Add to Preferred Sources` button embeds — badges in Top Stories **and** AI Overviews/AI Mode, ~2× CTR |
 | **Keyword-research playbook** (the 6 rules) | `research.py` | 1 audience problems (their words: GSC+PAA) → 2 broad seeds → 3 one-tool policy (never mix difficulty scores) → 4 intent (teach/compare/sell → page type) → 5 numbers (page / needs-edge / skip) → 6 clusters (one page per group, never compete with yourself) |

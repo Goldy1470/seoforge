@@ -146,6 +146,10 @@ def main():
     sub.add_parser("schedule-status")
     sub.add_parser("serve")
     sub.add_parser("mcp")
+    sub.add_parser("ai-bots")
+    sp = sub.add_parser("ai-bot-verify")
+    sp.add_argument("user_agent")
+    sp.add_argument("ip")
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -374,6 +378,14 @@ def main():
         from . import mcp_server
 
         mcp_server.main()
+    elif cmd == "ai-bots":
+        from . import ai_bots
+
+        _out(ai_bots.registry_summary())
+    elif cmd == "ai-bot-verify":
+        from . import ai_bots
+
+        _out(asyncio.run(ai_bots.verify_bot_request(args.user_agent, args.ip)))
 
 
 def _render_product(d: dict) -> str:

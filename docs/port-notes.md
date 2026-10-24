@@ -130,6 +130,70 @@ cloned read-only to `../ansvisor`. Nothing there is edited.
 - Suite: 102 tests passing offline (45 new in `tests/test_safe_fetch.py`,
   8 in `tests/test_crawler.py` including the two refusal acceptance tests).
 
+## Phase 2 (AI-bot + AI-source registries) — IN PROGRESS (2.1 landed)
+
+### Task 2.1 — AI-bot registry + range verification (`data/ai_bots.json`, `seoforge/ai_bots.py`)
+- Registry: 17 agents. 8 verified core bots mirroring the reference list
+  (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot,
+  Claude-User, PerplexityBot, Perplexity-User) with the operators' published
+  range URLs (all six checked live), plus the 9 agents SEOForge already
+  tracked in its extended list (anthropic-ai, google-extended,
+  gemini-deep-research, ccbot, applebot-extended, meta-externalagent,
+  mistralai-user, youbot, cohere-ai) as `ranges: null, verified: false`.
+  Registry order == match order.
+- Tolerant range parser: today all three operators' files share the
+  `{creationTime, prefixes: [{ipv4Prefix|ipv6Prefix}]}` shape (verified live);
+  the parser still handles bare arrays, `{ranges|ips|addresses|ipv4|ipv6}`,
+  `prefix|cidr|ip|range` object keys, and skips malformed entries — never
+  assuming one format, per plan.
+- `ai_bot_ranges` SQLite cache (migration 2; schema versions now `[1, 2]`):
+  fresh ≤ 24 h; a failed refresh keeps the last stored list (possibly stale);
+  with nothing ever stored, a negative-cache row (empty prefixes_json)
+  suppresses live retries for `RANGES_RETRY` (5 min) so bursts don't hammer a
+  dead endpoint.
+- Verification reasons mirror the ingest design: `unknown_agent` /
+  `no_ranges` / `unverified_ip` (spoofed UA = UA matched but IP outside the
+  operator's ranges).
+- Wiring: `geo.check_ai_readiness` now iterates the registry (17 tokens),
+  per-bot entries carry `type`/`verified`, and a new `checks.robots_by_type`
+  aggregates `explicitly_named`/`site_blocked` per training|search|user.
+  `aeo.stage_found` scores named/total over the registry, reports
+  `bots_by_type`, the robots fix bullet names the actual unnamed agents (and
+  disappears when all are named), and a note fires when training crawlers are
+  blocked while search/user agents pass (common deliberate choice).
+  `aeo.AI_AGENTS_EXTENDED` and `geo.AI_BOTS` became derived aliases — the
+  registry file is the single source of truth.
+- CLI: `ai-bots` (registry view), `ai-bot-verify "<ua>" <ip>`; MCP tools:
+  `ai_bots_list`, `ai_bot_verify`.
+
+### Discrepancies / decisions (code over plan)
+- **geo._score's all-explicitly-named gate became stricter**: populations are
+  now all 17 registry bots (old hard-coded list: 9). The score formula is
+  untouched; the gate's meaning ("every tracked agent has an explicit
+  robots.txt section") must cover everything we track. Recorded here since it
+  changes reported `ai_readiness_score` values.
+- **Stale-keep window simplified**: the JS kept a stale list usable for one
+  further hour after a failed refresh; the port returns the stale list on
+  every failed refresh, gated by the 24 h freshness + 5 min retry window.
+  Strictly more available, simpler to reason about.
+- **Phase 1 TLS caveat resolved**: the first live Phase 2 fetch (manual CLI
+  run `ai-bot-verify "GPTBot/1.2" 203.0.113.9`) pulled OpenAI's real range
+  file through safe_fetch — DNS pinning, SNI + certificate verification and
+  the JSON parse all worked; UA matched, documentation IP correctly outside
+  OpenAI's ranges → `unverified_ip`. The manual run legitimately wrote a
+  production cache row (it is the CLI, not the test suite; `data/*.db` is
+  gitignored).
+- The JS module's in-memory pending-read coordination was not ported: the
+  SQLite cache is the coordination point (idempotent GET + upsert); no
+  consumer double-fetches the same URL within the TTL.
+- Not ported from the reference module: `botUsage`-style aggregation maps —
+  Phase 4 (log ingest) is their real consumer; they will be designed there,
+  over this registry.
+
+### Toolchain
+- Suite: 134 tests passing offline (35 new in `tests/test_ai_bots.py`;
+  fixtures use RFC 5737 / 2001:db8 documentation ranges only).
+
 ## Open questions for the human (plan §12 — still pending)
 - (Phase 6) scraper-backed provider for consumer AI surfaces — cost + ToS review.
 - (Phase 7) Postgres before first paying customers vs SQLite closed beta.

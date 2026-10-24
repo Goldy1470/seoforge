@@ -36,6 +36,9 @@ SOFTWARE.
 |---|---|---|
 | `seoforge/safe_fetch.py` | `server/src/lib/safe-fetch.js` | SSRF-safe fetch semantics (blocklist, DNS-rebinding-resistant pinning, manual redirect re-validation, byte/time caps, typed error codes) re-implemented for httpx/asyncio; accept-list extended beyond HTML for robots/sitemaps/JSON. |
 | `tests/test_safe_fetch.py` | behaviour matrix of `safe-fetch.js` + `fetchPage` test hooks | offline httpx.MockTransport harness; resolver/ports knobs mirror the JS `lookup`/`ports` test hooks. |
+| `data/ai_bots.json` | `server/src/lib/ai-bots.json` | registry structure (versioned file, key/name/operator/type/userAgent/ranges), the 8 verified bots and their operator-published range URLs re-entered; 9 extended agents added (ranges null, verified false); change-history text rewritten in SEOForge's own words. |
+| `seoforge/ai_bots.py` | `server/src/lib/ai-bots.js` | verification semantics re-implemented in Python: token-boundary UA matching, published-range IP verification, 24 h cache with stale-keep-on-failure and a short negative-cache retry gate. Storage moved from in-memory JS maps to SQLite (`ai_bot_ranges`, migration 2); fetching goes through SEOForge's SSRF-safe fetcher; the range parser is intentionally tolerant of several published JSON shapes (verified live: OpenAI, Anthropic and Perplexity currently share one `prefixes:[{ipv4Prefix,ipv6Prefix}]` shape). |
+| `tests/test_ai_bots.py` (+ `tests/fixtures/ai_bot_ranges/*.json`) | behaviour matrix of `ai-bots.js` | offline MockTransport harness; fixture payloads are synthetic (RFC 5737/2001:db8) shape samples, not operator data. |
 
 ## dir-derivation rules honoured
 

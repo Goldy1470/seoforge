@@ -210,6 +210,22 @@ def aeo_llms_full() -> str:
 
 
 @mcp.tool()
+def ai_bots_list() -> dict:
+    """AI-crawler registry: every bot we track (operator, type training/search/user, UA token), which publish IP ranges, and the count per type."""
+    from . import ai_bots
+
+    return ai_bots.registry_summary()
+
+
+@mcp.tool()
+def ai_bot_verify(user_agent: str = "", ip: str = "") -> dict:
+    """Verify one hit (user agent + IP) as an AI bot: UA match on token boundaries + IP inside the operator's published ranges (fetched live, 24 h cached). Returns the bot, or a reason: unknown_agent / no_ranges / unverified_ip."""
+    from . import ai_bots
+
+    return asyncio.run(ai_bots.verify_bot_request(user_agent, ip))
+
+
+@mcp.tool()
 def preferred_sources_audit(site: str = "") -> dict:
     """Google Preferred Sources audit: eligibility (fresh content, domain property, SGEA-in-GSC), official button snippet, checklist."""
     from . import preferred

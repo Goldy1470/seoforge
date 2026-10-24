@@ -29,7 +29,7 @@ def test_fresh_db_reaches_full_schema():
             "schedule", "jobs", "reports",
         }
         versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations")]
-        assert versions == [1]
+        assert versions == [1, 2]
 
 
 def test_legacy_db_upgrades_to_current_schema():
@@ -41,7 +41,9 @@ def test_legacy_db_upgrades_to_current_schema():
     with db._conn() as conn:
         assert _columns(conn, "pages") == _expected_pages_columns()
         versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations")]
-        assert versions == [1]
+        assert versions == [1, 2]
+        cache_cols = {r[1] for r in conn.execute("PRAGMA table_info(ai_bot_ranges)")}
+        assert cache_cols == {"url", "prefixes_json", "fetched_at"}
 
 
 def test_apply_is_idempotent_on_reopen():
@@ -50,4 +52,4 @@ def test_apply_is_idempotent_on_reopen():
     assert first == []
     with db._conn() as conn:
         rows = conn.execute("SELECT count(*) c FROM schema_migrations").fetchone()
-        assert rows["c"] == 1
+        assert rows["c"] == 2

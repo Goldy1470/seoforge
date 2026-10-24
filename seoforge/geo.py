@@ -5,21 +5,11 @@ from urllib.parse import urljoin
 
 import httpx
 
-from . import db
-from . import safe_fetch
+from . import ai_bots, db, safe_fetch
 from .config import settings
 
-AI_BOTS = [
-    "GPTBot",
-    "OAI-SearchBot",
-    "ChatGPT-User",
-    "ClaudeBot",
-    "PerplexityBot",
-    "Google-Extended",
-    "CCBot",
-    "Applebot-Extended",
-    "meta-externalagent",
-]
+# Compatibility alias: the registry in data/ai_bots.json is the source of truth.
+AI_BOTS = [b.userAgent for b in ai_bots.all_bots()]
 
 FAQ_TEST_UA = "GPTBot"
 
@@ -50,16 +40,30 @@ async def check_ai_readiness(site: str | None = None) -> dict:
         robots = await _get(c, urljoin(origin, "/robots.txt"))
         robots_text = robots.text if robots is not None and robots.status == 200 else ""
         sections = _parse_robots(robots_text)
+        bots = ai_bots.all_bots()
         result["checks"]["robots_ai_agents"] = {}
-        for bot in AI_BOTS:
-            section = sections.get(bot.lower(), {}) or sections.get("*", {})
+        for bot in bots:
+            token = bot.userAgent.lower()
+            section = sections.get(token, {}) or sections.get("*", {})
             disallows = section.get("disallow", [])
             blocks_site = bool(disallows) and all(d != "" for d in disallows) and any(d == "/" for d in disallows)
-            result["checks"]["robots_ai_agents"][bot] = {
-                "explicitly_named": bot.lower() in sections,
+            result["checks"]["robots_ai_agents"][bot.userAgent] = {
+                "explicitly_named": token in sections,
                 "effectively_allowing_site": not blocks_site,
                 "disallow": disallows[:3],
+                "type": bot.type,
+                "verified": bot.verified,
             }
+        by_type: dict = {}
+        for t in ("training", "search", "user"):
+            group = [b for b in bots if b.type == t]
+            entries = [result["checks"]["robots_ai_agents"][b.userAgent] for b in group]
+            by_type[t] = {
+                "total": len(group),
+                "explicitly_named": sum(1 for e in entries if e["explicitly_named"]),
+                "site_blocked": sum(1 for e in entries if not e["effectively_allowing_site"]),
+            }
+        result["checks"]["robots_by_type"] = by_type
         result["robots_txt_found"] = bool(robots_text)
         llms = await _get(c, urljoin(origin, "/llms.txt"))
         result["checks"]["llms_txt"] = {
