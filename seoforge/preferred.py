@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from . import db, indexing
+from . import db, indexing, safe_fetch
 from .config import settings
 
 DOCS = "https://developers.google.com/search/docs/appearance/preferred-sources"
@@ -53,14 +53,12 @@ def _freshness(site: str) -> dict:
     lastmods = []
     try:
         async def pull():
-            async with httpx.AsyncClient(headers={"User-Agent": settings.user_agent}, timeout=30, follow_redirects=True) as c:
-                return await indexing._sitemap_urls(c, site)
+            return await indexing._sitemap_urls(None, site)
 
         urls = asyncio.run(pull())
         async def mods():
-            async with httpx.AsyncClient(headers={"User-Agent": settings.user_agent}, timeout=30, follow_redirects=True) as c:
-                r = await c.get(urljoin(site, "/sitemap.xml"))
-                return r.text if r.status_code == 200 else ""
+            r = await safe_fetch.fetch(urljoin(site, "/sitemap.xml"), accept=None, truncate=True, timeout=30)
+            return r.text if r.status == 200 else ""
         xml = asyncio.run(mods())
         for block in re.findall(r"<url>(.*?)</url>", xml, re.S):
             loc = re.search(r"<loc>\s*([^<\s]+)", block)
@@ -102,8 +100,8 @@ def audit(site: str | None = None) -> dict:
     fresh = _freshness(site)
     html = None
     try:
-        r = httpx.get(site, headers={"User-Agent": "Mozilla/5.0"}, timeout=25, follow_redirects=True)
-        html = r.text if r.status_code == 200 else None
+        r = safe_fetch.fetch_sync(site, accept=("text/html", "application/xhtml+xml"), truncate=True, timeout=25)
+        html = r.text if r.status == 200 else None
     except Exception:
         pass
     button_present = bool(html) and (

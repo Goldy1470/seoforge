@@ -34,7 +34,8 @@ SOFTWARE.
 
 | SEOForge file | Derives from Ansvisor | Notes |
 |---|---|---|
-| (none yet — updated every time something is ported) | | |
+| `seoforge/safe_fetch.py` | `server/src/lib/safe-fetch.js` | SSRF-safe fetch semantics (blocklist, DNS-rebinding-resistant pinning, manual redirect re-validation, byte/time caps, typed error codes) re-implemented for httpx/asyncio; accept-list extended beyond HTML for robots/sitemaps/JSON. |
+| `tests/test_safe_fetch.py` | behaviour matrix of `safe-fetch.js` + `fetchPage` test hooks | offline httpx.MockTransport harness; resolver/ports knobs mirror the JS `lookup`/`ports` test hooks. |
 
 ## dir-derivation rules honoured
 

@@ -13,9 +13,24 @@ import tldextract
 from bs4 import BeautifulSoup
 
 from . import db
+from . import safe_fetch
 from .config import settings
+from .safe_fetch import FetchError, check_url
 
 _R_STATUS_PASS = 200
+
+
+class _Resp:
+    """Field-compatible shim over safe_fetch.FetchResult for the crawl worker."""
+
+    __slots__ = ("status", "content_type", "text", "url", "size")
+
+    def __init__(self, status: int, content_type: str, text: str, url: str, size: int = 0):
+        self.status = status
+        self.content_type = content_type
+        self.text = text
+        self.url = url
+        self.size = size
 
 # Offline configuration: never fetch the live Public Suffix List; always use
 # the snapshot bundled inside the tldextract wheel.
@@ -42,21 +57,20 @@ def _registrable(url: str) -> str:
     return host
 
 
-async def _load_sitemaps(client: httpx.AsyncClient, origin: str) -> list[str]:
+async def _load_sitemaps(client: httpx.AsyncClient, origin: str, resolver=None) -> list[str]:
     urls: list[str] = []
 
     async def parse(sm):
         try:
-            r = await client.get(sm)
+            r = await safe_fetch.fetch(sm, accept=None, client=client, truncate=True, resolver=resolver, timeout=settings.request_timeout)
         except Exception:
             return
-        if r.status_code != 200:
-            return
-        if "<urlset" in r.text[:200]:
-            for m in re.finditer(r"<loc>\s*([^<\s]+)\s*</loc>", r.text):
+        text = r.text
+        if "<urlset" in text[:200]:
+            for m in re.finditer(r"<loc>\s*([^<\s]+)\s*</loc>", text):
                 urls.append(_norm(m.group(1)))
-        elif "<sitemapindex" in r.text[:200]:
-            for m in re.finditer(r"<loc>\s*([^<\s]+)\s*</loc>", r.text):
+        elif "<sitemapindex" in text[:200]:
+            for m in re.finditer(r"<loc>\s*([^<\s]+)\s*</loc>", text):
                 locs.append(_norm(m.group(1)))
 
     locs: list[str] = []
@@ -73,16 +87,23 @@ async def _load_sitemaps(client: httpx.AsyncClient, origin: str) -> list[str]:
     return list(dict.fromkeys(urls))
 
 
-async def _fetch_robots(client: httpx.AsyncClient, origin: str) -> str:
+async def _fetch_robots(client: httpx.AsyncClient, origin: str, resolver=None) -> str:
     try:
-        r = await client.get(urljoin(origin, "/robots.txt"))
-        return r.text if r.status_code == 200 else ""
+        r = await safe_fetch.fetch(
+            urljoin(origin, "/robots.txt"),
+            accept=None,
+            client=client,
+            truncate=True,
+            resolver=resolver,
+            timeout=settings.request_timeout,
+        )
+        return r.text if r.status == 200 else ""
     except Exception:
         return ""
 
 
-async def _fetch_robots_object(client: httpx.AsyncClient, origin: str):
-    """Fetch robots.txt via the async client and parse it in-process.
+async def _fetch_robots_object(client: httpx.AsyncClient, origin: str, resolver=None):
+    """Fetch robots.txt safely (checked, pinned) and parse it in-process.
 
     urllib's RobotFileParser.read() does a blocking, unguarded fetch that
     stalls the event loop — replaced by parse(lines). Robots gating is
@@ -91,7 +112,7 @@ async def _fetch_robots_object(client: httpx.AsyncClient, origin: str):
     """
     if not settings.respect_robots:
         return None
-    text = await _fetch_robots(client, origin)
+    text = await _fetch_robots(client, origin, resolver)
     if not text:
         return None
     rp = robotparser.RobotFileParser()
@@ -173,23 +194,35 @@ def _parse_page(url: str, text: str, base: str) -> dict:
     }
 
 
-async def _fetch(client: httpx.AsyncClient, url: str, rp: robotparser.RobotFileParser):
+async def _fetch(client: httpx.AsyncClient, url: str, rp: robotparser.RobotFileParser, resolver=None):
     if rp and not rp.can_fetch(settings.user_agent, url):
-        return None, 0, 0
+        return None
     t0 = asyncio.get_event_loop().time()
-    resp = None
-    size = 0
     try:
-        resp = await client.get(url, follow_redirects=True)
-        size = len(resp.content)
-    except Exception:
-        pass
+        r = await safe_fetch.fetch(
+            url,
+            accept=None,  # content-type gating stays in the crawl logic; the
+            # safe fetcher supplies the SSRF checks, caps and caps-timeout
+            client=client,
+            truncate=True,
+            resolver=resolver,
+            timeout=settings.request_timeout,
+        )
+    except FetchError as e:
+        if e.code == "http_error":
+            ms = int((asyncio.get_event_loop().time() - t0) * 1000)
+            return _Resp(e.status or 0, "", "", url, 0), ms
+        return None  # blocked / unreachable / timeout: recorded like a dead page
     ms = int((asyncio.get_event_loop().time() - t0) * 1000)
-    return resp, ms, size
+    size = len(r.body_bytes)
+    return _Resp(r.status, r.content_type, r.text, r.url, size), ms
 
 
-async def crawl_site(start_url: str, job_id: str | None = None, *, transport=None) -> dict:
+async def crawl_site(start_url: str, job_id: str | None = None, *, transport=None, resolver=None) -> dict:
     start = _norm(start_url or settings.site_url)
+    # user-supplied entry point: refused (invalid_url / blocked) before any
+    # fetch, unless the operator opted into private fetching locally
+    check_url(start)
     origin = urljoin(start, "/")
     reg_domain = _registrable(start)
     job_id = job_id or db.start_job("crawl", {"start": start})
@@ -207,8 +240,8 @@ async def crawl_site(start_url: str, job_id: str | None = None, *, transport=Non
         http2=True,
         transport=transport,
     ) as client:
-        rp = await _fetch_robots_object(client, origin)
-        sitemap_urls = await _load_sitemaps(client, origin)
+        rp = await _fetch_robots_object(client, origin, resolver)
+        sitemap_urls = await _load_sitemaps(client, origin, resolver)
 
         for u in [start] + sitemap_urls[: settings.max_pages]:
             if u not in seen and _registrable(u) == reg_domain:
@@ -232,23 +265,21 @@ async def crawl_site(start_url: str, job_id: str | None = None, *, transport=Non
                 try:
                     if url in pages or depth > settings.max_depth or len(pages) >= settings.max_pages:
                         continue
-                    resp, ms, size = await _fetch(client, url, rp)
+                    fetched = await _fetch(client, url, rp, resolver)
+                    resp, ms = fetched if fetched else (None, 0)
                     if resp is None:
                         pages[url] = {"status": -1, "depth": depth}
                         status_counter["robot-blocked"] += 1
                         continue
-                    status_counter[resp.status_code] += 1
+                    status_counter[resp.status] += 1
                     rec = {
-                        "status": resp.status_code,
+                        "status": resp.status,
                         "depth": depth,
                         "response_ms": ms,
-                        "size_bytes": size,
+                        "size_bytes": resp.size,
                         "final_url": _norm(str(resp.url)),
                     }
-                    if (
-                        resp.status_code == _R_STATUS_PASS
-                        and "text/html" in resp.headers.get("content-type", "")
-                    ):
+                    if resp.status == _R_STATUS_PASS and "text/html" in (resp.content_type or ""):
                         rec.update(_parse_page(url, resp.text, str(resp.url)))
                         rec["links_out"] = len(rec.get("links", []))
                         for l in rec.get("links", []):

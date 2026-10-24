@@ -36,7 +36,9 @@ def _crawl(monkeypatch, **kw):
     monkeypatch.setattr(settings, "max_concurrency", 3)
     monkeypatch.setattr(settings, "max_pages", 50)
     transport = httpx.MockTransport(_handler_factory(**kw))
-    return asyncio.run(crawler.crawl_site(BASE, transport=transport))
+    return asyncio.run(
+        crawler.crawl_site(BASE, transport=transport, resolver=lambda h: "93.184.216.34")
+    )
 
 
 def test_crawl_discovers_links_after_slow_home(monkeypatch):
@@ -78,3 +80,19 @@ def test_registrable_host_fallbacks():
 @pytest.mark.parametrize("url", ["https://example.co.uk/g", "https://example.com"])
 def test_registrable_no_port_in_output(url):
     assert ":" not in crawler._registrable(url)
+
+
+def test_crawl_refuses_private_address_by_default():
+    from seoforge.safe_fetch import FetchError
+
+    with pytest.raises(FetchError) as e:
+        asyncio.run(crawler.crawl_site("http://127.0.0.1:8000"))
+    assert e.value.code in ("blocked", "invalid_url")
+
+
+def test_crawl_refuses_loopback_even_on_default_port():
+    from seoforge.safe_fetch import FetchError
+
+    with pytest.raises(FetchError) as e:
+        asyncio.run(crawler.crawl_site("http://127.0.0.1/"))
+    assert e.value.code == "blocked"

@@ -22,8 +22,12 @@ mcp = FastMCP(
 def crawl_site(url: str = "") -> dict:
     """Crawl a site like Screaming Frog: titles, metas, canonicals, status, links, JSON-LD, speed."""
     from . import crawler
+    from .safe_fetch import FetchError
 
-    return asyncio.run(crawler.crawl_site(url or settings.site_url))
+    try:
+        return asyncio.run(crawler.crawl_site(url or settings.site_url))
+    except FetchError as e:
+        return {"error": e.code, "message": str(e)}
 
 
 @mcp.tool()

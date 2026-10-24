@@ -9,18 +9,21 @@ from urllib.parse import urljoin
 import httpx
 
 from . import db
+from . import safe_fetch
 from .config import settings
 
 INDEXNOW = "https://api.indexnow.org/indexnow"
 
 
-async def _sitemap_urls(client: httpx.AsyncClient, origin: str, depth: int = 0) -> list[str]:
+async def _sitemap_urls(client: httpx.AsyncClient | None, origin: str, depth: int = 0) -> list[str]:
     out: list[str] = []
     try:
-        r = await client.get(urljoin(origin, "/sitemap.xml"), timeout=30)
-    except Exception:
+        r = await safe_fetch.fetch(
+            urljoin(origin, "/sitemap.xml"), accept=None, client=client, truncate=True, timeout=30
+        )
+    except safe_fetch.FetchError:
         return out
-    if r.status_code != 200:
+    if r.status != 200:
         return out
     locs = re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", r.text)
     if "<sitemapindex" in r.text[:200].lower() and depth < 2:
@@ -32,15 +35,15 @@ async def _sitemap_urls(client: httpx.AsyncClient, origin: str, depth: int = 0) 
 
 
 async def _run_crosscheck(site: str) -> dict:
-    async with httpx.AsyncClient(
-        headers={"User-Agent": settings.user_agent}, follow_redirects=True, timeout=30
-    ) as c:
+    async def _robots_ok() -> bool:
         try:
-            r = await c.get(urljoin(site, "/robots.txt"))
-            robots_ok = r.status_code == 200
-        except Exception:
-            robots_ok = False
-        sitemap_urls = await _sitemap_urls(c, site)
+            r = await safe_fetch.fetch(urljoin(site, "/robots.txt"), accept=None, truncate=True, timeout=30)
+            return r.status == 200
+        except safe_fetch.FetchError:
+            return False
+
+    robots_ok = await _robots_ok()
+    sitemap_urls = await _sitemap_urls(None, site)
     with db._conn() as conn:
         rows = conn.execute(
             "SELECT url, status, meta_robots, canonical, word_count FROM pages WHERE status IS NOT NULL"
