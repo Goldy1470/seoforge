@@ -150,6 +150,12 @@ def main():
     sp = sub.add_parser("ai-bot-verify")
     sp.add_argument("user_agent")
     sp.add_argument("ip")
+    sub.add_parser("ai-sources")
+    sp = sub.add_parser("ai-classify")
+    sp.add_argument("--referrer", default="")
+    sp.add_argument("--utm-source", default="")
+    sp.add_argument("--utm-medium", default="")
+    sp.add_argument("--landing", default="")
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -386,6 +392,20 @@ def main():
         from . import ai_bots
 
         _out(asyncio.run(ai_bots.verify_bot_request(args.user_agent, args.ip)))
+    elif cmd == "ai-sources":
+        from . import ai_sources
+
+        _out(ai_sources.sources_summary())
+    elif cmd == "ai-classify":
+        from . import ai_sources
+
+        hit = ai_sources.classify(
+            args.referrer or None, args.utm_source or None, args.utm_medium or None, args.landing or None
+        )
+        if hit is None:
+            _out({"source": None, "note": "not AI traffic (normal outcome for most visits)"})
+        else:
+            _out({"source": hit.source, "surface": hit.surface, "origin": hit.origin})
 
 
 def _render_product(d: dict) -> str:

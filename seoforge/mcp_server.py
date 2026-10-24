@@ -226,6 +226,27 @@ def ai_bot_verify(user_agent: str = "", ip: str = "") -> dict:
 
 
 @mcp.tool()
+def ai_sources_list() -> dict:
+    """AI-assistant source registry: every source we count traffic from (hosts, aliases, surfaces like ChatGPT Shopping), with the Bing /ck/a referrer gate flagged."""
+    from . import ai_sources
+
+    return ai_sources.sources_summary()
+
+
+@mcp.tool()
+def classify_ai_traffic(referrer: str = "", utm_source: str = "", utm_medium: str = "", landing_url: str = "") -> dict:
+    """Classify one visit: which AI assistant it came from and through which surface. Referrer first (Bing counts only via its /ck/a redirect), utm_source second; medium feed = ChatGPT Shopping."""
+    from . import ai_sources
+
+    result = ai_sources.classify(
+        referrer or None, utm_source or None, utm_medium or None, landing_url or None
+    )
+    if result is None:
+        return {"source": None, "note": "not AI traffic (normal outcome for most visits)"}
+    return {"source": result.source, "surface": result.surface, "origin": result.origin}
+
+
+@mcp.tool()
 def preferred_sources_audit(site: str = "") -> dict:
     """Google Preferred Sources audit: eligibility (fresh content, domain property, SGEA-in-GSC), official button snippet, checklist."""
     from . import preferred

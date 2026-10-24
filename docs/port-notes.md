@@ -130,7 +130,7 @@ cloned read-only to `../ansvisor`. Nothing there is edited.
 - Suite: 102 tests passing offline (45 new in `tests/test_safe_fetch.py`,
   8 in `tests/test_crawler.py` including the two refusal acceptance tests).
 
-## Phase 2 (AI-bot + AI-source registries) — IN PROGRESS (2.1 landed)
+## Phase 2 (AI-bot + AI-source registries) — COMPLETE
 
 ### Task 2.1 — AI-bot registry + range verification (`data/ai_bots.json`, `seoforge/ai_bots.py`)
 - Registry: 17 agents. 8 verified core bots mirroring the reference list
@@ -166,7 +166,29 @@ cloned read-only to `../ansvisor`. Nothing there is edited.
 - CLI: `ai-bots` (registry view), `ai-bot-verify "<ua>" <ip>`; MCP tools:
   `ai_bots_list`, `ai_bot_verify`.
 
+### Task 2.2 — AI-source registry + classifier (`data/ai_sources.json`, `seoforge/ai_sources.py`)
+- Registry: 13 sources, version-3 state — chatgpt.com (hosts incl.
+  chat.openai.com; aliases chatgpt/openai/openai.com; Shopping surface
+  medium=feed), perplexity.ai, claude.ai, gemini.google.com (bard.google.com),
+  copilot.microsoft.com (copilot.com), grok.com, deepseek.com, meta.ai,
+  you.com, phind.com, poe.com, labs.google, bing.com (referrerPath /ck/a,
+  analytics: false, utm: false). Change history rewritten in SEOForge's own
+  words.
+- Semantics ported from `ai-sources.js` + the tracking snippet:
+  `normalize_source` (lower/trim/one leading `www.`); match = exact alias OR
+  host-or-subdomain, never substring; origin-aware counting (`utm: false` /
+  `analytics: false` opt-outs); referrer-first → utm_source fallback order;
+  the Bing referrer gate; `landing_medium` = first `utm_medium` param, name
+  in any case; surface = exact medium, any case ("feed"→shopping,
+  "rss-feed"→not); `ai_source_pattern` RE2 helper for GA4.
+- `classify(referrer, utm_source, utm_medium, landing_url)` returns
+  source + surface + origin, or None (normal outcome).
+- CLI `ai-sources` + `ai-classify`; MCP `ai_sources_list` +
+  `classify_ai_traffic`.
+
 ### Discrepancies / decisions (code over plan)
+
+Task 2.1:
 - **geo._score's all-explicitly-named gate became stricter**: populations are
   now all 17 registry bots (old hard-coded list: 9). The score formula is
   untouched; the gate's meaning ("every tracked agent has an explicit
@@ -190,9 +212,29 @@ cloned read-only to `../ansvisor`. Nothing there is edited.
   Phase 4 (log ingest) is their real consumer; they will be designed there,
   over this registry.
 
+Task 2.2:
+- **The Bing gate is a per-source skip at the referrer origin, judged on the
+  RAW referrer string** — the tracking snippet checks
+  `referrer.indexOf(referrerPath) === -1` (substring), not parsed-path
+  equality; ported exactly that way, so `www.bing.com/ck/a?…` counts and
+  `www.bing.com/search?q=…` does not. (An earlier plan sketch suggested
+  path equality — code wins, recorded.)
+- **Alias matching is array membership (exact), not contains-on-string** —
+  the snippet's `e.a.indexOf(x)` reads the array; `not-perplexity` etc. must
+  never match. Locked by tests.
+- **The GA4 ("analytics") origin is ported but intentionally unused by
+  `classify()`** — the on-site classifier is referrer+utm only, exactly like
+  the snippet; the analytics origin (and `ai_source_pattern`) exists for the
+  GA4-sync work in a later phase, where the same table decides what counts.
+- `classify()` accepts the medium as an explicit `utm_medium` argument with
+  the landing URL's own `utm_medium` as fallback — log lines often carry
+  both separately; the snippet itself never sees landing URLs, so this is a
+  Phase-4-shaped extension of the same rule, not a new matching rule.
+
 ### Toolchain
-- Suite: 134 tests passing offline (35 new in `tests/test_ai_bots.py`;
-  fixtures use RFC 5737 / 2001:db8 documentation ranges only).
+- Suite: 148 tests passing offline — 35 new in `tests/test_ai_bots.py`
+  (fixtures use RFC 5737 / 2001:db8 documentation ranges only) + 14 new in
+  `tests/test_ai_sources.py` (table-driven over every source in the file).
 
 ## Open questions for the human (plan §12 — still pending)
 - (Phase 6) scraper-backed provider for consumer AI surfaces — cost + ToS review.
