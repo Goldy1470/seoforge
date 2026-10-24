@@ -222,6 +222,62 @@ def preferred_sources_button(theme: str = "light", lang: str = "", mode: str = "
 
 
 @mcp.tool()
+def technical_audit(max_clicks: int = 3) -> dict:
+    """Six technical rules: 3-click structure, JS-shell crawlability, GSC-indexed/skipped batch, render-blocker speed, viewport mobile, sitemap policy + submissions."""
+    from . import technical
+
+    return technical.report()
+
+
+@mcp.tool()
+def site_structure(max_clicks: int = 3) -> dict:
+    """Rule: BFS click-distance of important (GSC-topped) pages from the homepage - flag anything beyond ~3 clicks."""
+    from . import technical
+
+    return technical.structure(max_clicks)
+
+
+@mcp.tool()
+def crawlability_report() -> dict:
+    """JS shells vs raw-HTML words per page: what GPTBot/ClaudeBot actually see without executing JavaScript."""
+    from . import technical
+
+    return technical.crawlability()
+
+
+@mcp.tool()
+def index_status(urls: list = [], limit: int = 25) -> dict:
+    """Batch GSC urlInspection: indexed vs skipped + Google coverage reasons per URL."""
+    from . import technical
+
+    return technical.index_status(list(urls) or None, limit)
+
+
+@mcp.tool()
+def speed_report() -> dict:
+    """Render-blocking head resources + TTFB/size per page: main-content-first verdict."""
+    from . import technical
+
+    return technical.speed_rules()
+
+
+@mcp.tool()
+def mobile_report() -> dict:
+    """Viewport meta per page (the phone-usability floor) + pointer to CWV mobile data."""
+    from . import technical
+
+    return technical.mobile_rules()
+
+
+@mcp.tool()
+def sitemap_policy() -> dict:
+    """What belongs in sitemap.xml (keep/remove, thin+noindex+404s) and how it reaches Google & Bing."""
+    from . import technical
+
+    return technical.sitemap_policy()
+
+
+@mcp.tool()
 def value_vs_semrush(openseo_hosted: bool = False, markdown: bool = False) -> dict | str:
     """Semrush $139.95/mo vs the SEOForge stack: module coverage matrix + cost model."""
     from . import value

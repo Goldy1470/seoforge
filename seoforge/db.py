@@ -156,6 +156,9 @@ def get_db() -> sqlite3.Connection:
     for stmt in (
         "ALTER TABLE pages ADD COLUMN headings TEXT",
         "ALTER TABLE pages ADD COLUMN first_text TEXT",
+        "ALTER TABLE pages ADD COLUMN viewport INTEGER",
+        "ALTER TABLE pages ADD COLUMN render_blockers INTEGER",
+        "ALTER TABLE pages ADD COLUMN js_flag TEXT",
     ):
         try:
             conn.execute(stmt)

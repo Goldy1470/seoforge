@@ -119,6 +119,15 @@ def main():
     sp = sub.add_parser("onpage-pack")
     sp.add_argument("query")
     sp.add_argument("--usp", default="")
+    sp = sub.add_parser("structure")
+    sp.add_argument("--max-clicks", type=int, default=3)
+    sub.add_parser("crawlability")
+    sub.add_parser("speed")
+    sub.add_parser("mobile")
+    sp = sub.add_parser("index-status")
+    sp.add_argument("--limit", type=int, default=25)
+    sub.add_parser("sitemap-policy")
+    sub.add_parser("technical")
     sp = sub.add_parser("watch-add")
     sp.add_argument("keyword")
     sp.add_argument("--competitor", default="")
@@ -311,6 +320,34 @@ def main():
         from . import onpage
 
         _out(onpage.fix_pack(args.query, args.usp), full=True)
+    elif cmd == "structure":
+        from . import technical
+
+        _out(technical.structure(args.max_clicks), full=True)
+    elif cmd == "crawlability":
+        from . import technical
+
+        _out(technical.crawlability(), full=True)
+    elif cmd == "speed":
+        from . import technical
+
+        _out(technical.speed_rules(), full=True)
+    elif cmd == "mobile":
+        from . import technical
+
+        _out(technical.mobile_rules(), full=True)
+    elif cmd == "index-status":
+        from . import technical
+
+        _out(technical.index_status(None, args.limit), full=True)
+    elif cmd == "sitemap-policy":
+        from . import technical
+
+        _out(technical.sitemap_policy(), full=True)
+    elif cmd == "technical":
+        from . import technical
+
+        _out(technical.report(), full=True)
     elif cmd == "geo":
         from . import geo
 

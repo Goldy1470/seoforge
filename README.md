@@ -113,6 +113,7 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | **Google Preferred Sources** (the 2026 sleeper) | `preferred.py` | eligibility audit (fresh content, domain property, SGEA-in-GSC) + official `Add to Preferred Sources` button embeds — badges in Top Stories **and** AI Overviews/AI Mode, ~2× CTR |
 | **Keyword-research playbook** (the 6 rules) | `research.py` | 1 audience problems (their words: GSC+PAA) → 2 broad seeds → 3 one-tool policy (never mix difficulty scores) → 4 intent (teach/compare/sell → page type) → 5 numbers (page / needs-edge / skip) → 6 clusters (one page per group, never compete with yourself) |
 | **On-page SEO** (the 6 rules) | `onpage.py` | per-page audit + one-query build pack: 1 title in searcher's words ≤60 · 2 meta says why you beat the results above · 3 headings phrased as the questions · 4 first words answer the heading · 5 alt text on real photos · 6 anchors matching destination titles — violations feed the work queue as `fix_onpage` |
+| **Technical SEO** (the 6 rules) | `technical.py` | 1 three-click structure (BFS over the link graph vs GSC-top pages) · 2 JS-shell vs raw-HTML words (GPTBot reality) · 3 batch urlInspection: indexed vs *Google skipped* + reasons · 4 render-blockers/TTFB main-content-first · 5 viewport/mobile floor + CWV · 6 sitemap keep/remove policy + Google ping & Bing IndexNow submissions — violations feed the queue (`fix_crawlability`, `fix_mobile`, `fix_speed`) |
 | AI-citation test | `geo.py` | ask a frontier LLM your buying questions, count brand/domain citations (the guide's experiment) |
 | Page scaffolds | `paa.py` | one markdown brief + FAQPage JSON-LD per question page for your agent to fill |
 | Orchestration | `orchestrator.py` | `seo_audit`, `content_plan`, `link_building_plan`, `full_pipeline` |
@@ -189,6 +190,12 @@ python -m seoforge.cli worth "crm for d2c" "email marketing pricing"   # page / 
 python -m seoforge.cli groups                       # cluster keywords so nobody competes with you
 python -m seoforge.cli onpage                       # six-rule on-page audit over the crawl DB
 python -m seoforge.cli onpage-pack "best crm for d2c"   # title/meta/headings/first-line/alt/links, pre-complied
+python -m seoforge.cli technical                   # six technical rules, one report
+python -m seoforge.cli structure                   # important pages beyond 3 clicks from home
+python -m seoforge.cli crawlability                # JS shells vs raw-HTML words (AI robots)
+python -m seoforge.cli index-status                # batch GSC: indexed vs skipped + reasons
+python -m seoforge.cli speed && python -m seoforge.cli mobile   # blockers + viewport sweeps
+python -m seoforge.cli sitemap-policy              # keep/remove lists + Google/Bing submission
 python -m seoforge.cli geo                        # AI-readiness score + GPTBot FAQ test
 python -m seoforge.cli serve                      # dashboard http://127.0.0.1:8808
 python -m seoforge.cli mcp                        # run MCP server for Codex/ChatGPT (stdio)
@@ -211,6 +218,7 @@ python -m seoforge.cli mcp                        # run MCP server for Codex/Cha
 - [x] v0.4 — Google Preferred Sources: eligibility audit + official button embed code (56 tools)
 - [x] v0.5 — keyword-research playbook: audience problems, seeds, one-tool policy, SERP intent (teach/compare/sell), volume+competition+trend verdicts, keyword clustering (63 tools)
 - [x] v0.6 — on-page SEO six rules: crawl now captures h2/h3 + first sentence; per-page audit (title phrase+length, meta why-beats, question headings, immediate answers, alt text, title-matched anchors) + onpage_pack generator; fix_onpage in the work queue (65 tools)
+- [x] v0.7 — technical SEO six rules: crawler captures viewport/render-blockers/JS-shell flags; 3-click structure BFS, js-shell crawlability, batch GSC index status, speed+mobile sweeps, sitemap keep/remove policy with Google+Bing submission; technical_audit MCP tool + work-queue wiring (72 tools)
 - [ ] JS-rendered crawl mode for SPA/Next sites via playwright
 - [ ] content generator: draft the question pages (title/H2/FAQ JSON-LD) with your LLM of choice
 - [ ] OpenAI-keyed AI-citation daily trend (citation position tracking in the funnel)

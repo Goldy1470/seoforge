@@ -87,6 +87,7 @@ button{{padding:6px 14px;margin:4px 2px}}</style></head><body>
 <form method=post action=/run/preferred style=display:inline><button>Preferred Sources</button></form>
 <form method=post action=/run/research style=display:inline><button>Keyword research</button></form>
 <form method=post action=/run/onpage style=display:inline><button>On-page audit</button></form>
+<form method=post action=/run/technical style=display:inline><button>Technical audit</button></form>
 </p>
 <p><b>Cost:</b> {value_els}</p>
 <p><b>Preferred Sources</b> (Google's newest free lever — Top Stories + AI Overviews/AI Mode badge, 2× CTR): {pref_stat}</p>
@@ -119,6 +120,7 @@ def run_job(kind: str):
         "preferred": lambda: _preferred_save(),
         "research": lambda: _research_save(),
         "onpage": lambda: _onpage_save(),
+        "technical": lambda: _technical_save(),
     }
     fn = fns.get(kind)
     if not fn:
@@ -176,6 +178,12 @@ def _onpage_save():
     rep["report_id"] = rid
     integrations.recompute(persist=True)
     return rep
+
+
+def _technical_save():
+    from . import technical
+
+    return technical.report()
 
 
 def _value_save():

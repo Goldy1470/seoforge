@@ -330,9 +330,10 @@ def recompute(include_volume: bool = True, persist: bool = True) -> dict:
     items += _noindex_in_sitemap()
     items += _cwv_slow()
     try:
-        from . import onpage
+        from . import onpage, technical
 
         items += onpage.opportunities()
+        items += technical.opportunities()
     except Exception:
         pass
     items += _backlink_directories()

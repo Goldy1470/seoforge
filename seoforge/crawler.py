@@ -79,12 +79,28 @@ def _parse_page(url: str, text: str, base: str) -> dict:
     meta = soup.find("meta", attrs={"name": "description"})
     robots_tag = soup.find("meta", attrs={"name": "robots"})
     canonical = soup.find("link", rel="canonical")
+    scripts_src = soup.find_all("script", src=True)
+    render_blockers = sum(
+        1 for s in scripts_src if not (s.has_attr("async") or s.has_attr("defer"))
+    ) + len(soup.find_all("link", rel="stylesheet"))
+    vp = soup.find("meta", attrs={"name": "viewport"})
+    viewport = 1 if (vp and "width=device-width" in (vp.get("content") or "").lower()) else 0
+    next_data = soup.find("script", id="__NEXT_DATA__") or any(
+        "/_next/" in (s.get("src") or "") for s in scripts_src
+    )
     h1 = " | ".join(h.get_text(" ", strip=True) for h in soup.find_all("h1")[:2])
     headings = [h.get_text(" ", strip=True) for h in soup.find_all(["h2", "h3"])][:10]
     for tag in soup(["script", "style", "noscript", "svg"]):
         tag.decompose()
     text = soup.get_text(" ", strip=True)
     first_text = text[:400]
+    words = len(text.split())
+    spa_shell = (
+        not next_data
+        and words < 120
+        and bool(soup.find(attrs={"id": "root"}) or soup.find(attrs={"id": "app"}))
+    )
+    js_flag = "next" if next_data else "spa" if spa_shell else ""
     links = []
     for a in soup.find_all("a", href=True):
         href = urljoin(base, a.get("href", "")).split("#")[0]
@@ -118,7 +134,10 @@ def _parse_page(url: str, text: str, base: str) -> dict:
         "h1": h1,
         "headings": headings,
         "first_text": first_text,
-        "word_count": len(text.split()),
+        "word_count": words,
+        "viewport": viewport,
+        "render_blockers": render_blockers,
+        "js_flag": js_flag,
         "links": links,
         "images_missing_alt": missing_alt,
         "jsonld": jsonld_types,
@@ -236,6 +255,9 @@ def _summarize(pages: dict, edges) -> dict:
         ],
         "thin_content": [u for u, r in html_pages.items() if (r.get("word_count") or 0) < 250],
         "images_missing_alt_total": sum((r.get("images_missing_alt") or 0) for r in html_pages.values()),
+        "missing_viewport": sum(1 for r in html_pages.values() if r.get("viewport") == 0),
+        "spa_shells": [u for u, r in html_pages.items() if r.get("js_flag") == "spa"][:20],
+        "avg_render_blockers": round(sum((r.get("render_blockers") or 0) for r in html_pages.values()) / n),
         "avg_response_ms": round(sum((r.get("response_ms") or 0) for r in pages.values()) / n),
         "jsonld_pages": sum(1 for r in html_pages.values() if r.get("jsonld")),
         "h1_mismatch": sum(
@@ -253,8 +275,8 @@ def _norm_text(s: str) -> str:
 
 SQL_UPSERT_PAGE = """INSERT INTO pages(job_id,url,status,depth,title,meta_desc,h1,canonical,
    meta_robots,word_count,links_out,response_ms,size_bytes,jsonld,
-   images_missing_alt,headings,first_text,harvested_at)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+   images_missing_alt,headings,first_text,viewport,render_blockers,js_flag,harvested_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
    ON CONFLICT(url) DO UPDATE SET
      job_id=excluded.job_id, status=excluded.status, depth=excluded.depth,
      title=excluded.title, meta_desc=excluded.meta_desc, h1=excluded.h1,
@@ -263,7 +285,8 @@ SQL_UPSERT_PAGE = """INSERT INTO pages(job_id,url,status,depth,title,meta_desc,h
      response_ms=excluded.response_ms, size_bytes=excluded.size_bytes,
      jsonld=excluded.jsonld, images_missing_alt=excluded.images_missing_alt,
      headings=excluded.headings, first_text=excluded.first_text,
-     harvested_at=excluded.harvested_at"""
+     viewport=excluded.viewport, render_blockers=excluded.render_blockers,
+     js_flag=excluded.js_flag, harvested_at=excluded.harvested_at"""
 
 
 def _persist(job_id: str, pages: dict, edges, summary: dict) -> None:
@@ -290,6 +313,9 @@ def _persist(job_id: str, pages: dict, edges, summary: dict) -> None:
                     r.get("images_missing_alt"),
                     json.dumps(r.get("headings")),
                     r.get("first_text"),
+                    r.get("viewport"),
+                    r.get("render_blockers"),
+                    r.get("js_flag"),
                     stamp,
                 ),
             )
