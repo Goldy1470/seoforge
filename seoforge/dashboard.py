@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 
 from . import backlinks, crawler, db, internal_links, integrations, orchestrator, paa
@@ -42,6 +42,10 @@ def index():
             f"({', '.join(f'{k}:{_json.loads(f['payload'])['stages'][k]['score']}' for k in ('found','answered','cited','recommended','chosen'))})</li>"
             for f in funnel_rows
         )
+        auto_row = conn.execute(
+            "SELECT payload FROM reports WHERE kind='autopilot_execution' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        auto_data = _json.loads(auto_row["payload"]) if auto_row else None
     rows = "".join(
         f"<tr><td>{j['id']}</td><td>{j['kind']}</td><td>{j['status']}</td><td>{j['started_at']}</td></tr>"
         for j in jobs
@@ -69,12 +73,51 @@ def index():
     else:
         pref_stat = "not audited yet"
         pref_els = "<li>run <em>Preferred Sources</em> — Google's newest free lever (Top Stories + AI Overviews/AI Mode badge, 2× CTR)</li>"
+
+    if auto_data and "diagnose" in auto_data:
+        diag = auto_data["diagnose"]
+        scores = diag.get("scores", {})
+        overall = diag.get("overall_score", 0)
+        auto_els = f"""
+<div style="background:#0f172a;color:#f8fafc;padding:18px 20px;border-radius:10px;margin:18px 0">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
+    <div>
+      <span style="font-size:22px;font-weight:bold;color:#38bdf8">⚡ Visibility Score: {overall}/100</span>
+      <div style="margin-top:6px;color:#94a3b8">
+        SEO: <b>{scores.get('seo', {}).get('score', 'N/A')}</b> ·
+        AEO: <b>{scores.get('aeo', {}).get('score', 'N/A')}</b> ·
+        GEO: <b>{scores.get('geo', {}).get('score', 'N/A')}</b> ·
+        AAO: <b>{scores.get('aao', {}).get('score', 'N/A')}</b>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <form method=post action=/run/autopilot style=display:inline><button style="background:#38bdf8;color:#0f172a;font-weight:bold;padding:8px 16px;border:none;border-radius:6px;cursor:pointer">🚀 Re-Run Autopilot</button></form>
+      <a href=/export/bundle style="display:inline-block;background:#22c55e;color:#fff;font-weight:bold;padding:8px 16px;border-radius:6px;text-decoration:none;margin-left:6px">📦 Download Fix ZIP</a>
+    </div>
+  </div>
+</div>"""
+    else:
+        auto_els = """
+<div style="background:#0f172a;color:#f8fafc;padding:18px 20px;border-radius:10px;margin:18px 0">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
+    <div>
+      <span style="font-size:20px;font-weight:bold;color:#38bdf8">⚡ Autonomous Execution Engine</span>
+      <div style="margin-top:4px;color:#94a3b8">One-click SEO + AEO + GEO + AAO diagnosis, fix bundle generation, directory submission, and search push.</div>
+    </div>
+    <div style="margin-top:10px">
+      <form method=post action=/run/autopilot style=display:inline><button style="background:#38bdf8;color:#0f172a;font-weight:bold;padding:8px 16px;border:none;border-radius:6px;cursor:pointer">🚀 Run Complete Autopilot</button></form>
+      <a href=/export/bundle style="display:inline-block;background:#22c55e;color:#fff;font-weight:bold;padding:8px 16px;border-radius:6px;text-decoration:none;margin-left:6px">📦 Generate & Download Fix ZIP</a>
+    </div>
+  </div>
+</div>"""
+
     return f"""<html><head><meta charset=utf-8><title>SEOForge</title>
 <style>body{{font-family:ui-monospace;font-size:14px;max-width:900px;margin:30px auto}}
 table{{border-collapse:collapse}}td{{border:1px solid #ccc;padding:4px 10px}}
 button{{padding:6px 14px;margin:4px 2px}}</style></head><body>
 <h1>SEOForge</h1>
 <p>{settings.site_url} — pages: {pages_n} · PAA questions: {paa_n}<br>{dir_els}</p>
+{auto_els}
 <p>
 <form method=post action=/run/crawl style=display:inline><button>Crawl</button></form>
 <form method=post action=/run/facets style=display:inline><button>Facets</button></form>
@@ -100,7 +143,8 @@ button{{padding:6px 14px;margin:4px 2px}}</style></head><body>
 <h2>Jobs</h2><table><tr><th>id</th><th>kind</th><th>status</th><th>started</th></tr>{rows}</table>
 <h2>Reports</h2><ul>{report_els}</ul>
 <h2>Exports</h2>
-<ul><li><a href=/export/paa>paa_build_list.csv</a></li>
+<ul><li><a href=/export/bundle><b>fix_bundle.zip (Complete AI & SEO Fix Package)</b></a></li>
+<li><a href=/export/paa>paa_build_list.csv</a></li>
 <li><a href=/export/tracker>backlink_tracker.csv</a></li>
 <li><a href=/export/feed>merchant_center.xml</a></li></ul>
 </body></html>"""
@@ -121,6 +165,9 @@ def run_job(kind: str):
         "research": lambda: _research_save(),
         "onpage": lambda: _onpage_save(),
         "technical": lambda: _technical_save(),
+        "autopilot": lambda: _autopilot_run(),
+        "bundle": lambda: _bundle_gen(),
+        "submit": lambda: _submit_batch(),
     }
     fn = fns.get(kind)
     if not fn:
@@ -196,6 +243,24 @@ def _value_save():
     return report
 
 
+def _autopilot_run():
+    from . import autopilot
+
+    return autopilot.run(skip_browser=True)
+
+
+def _bundle_gen():
+    from . import fix_bundle
+
+    return {"bundle_zip": fix_bundle.generate()}
+
+
+def _submit_batch():
+    from . import auto_submit
+
+    return auto_submit.batch_submit(max_per_session=5)
+
+
 def _clip(o, n=4000):
     s = json.dumps(o, default=str)
     return o if len(s) < n else {"preview": s[:n]}
@@ -222,7 +287,141 @@ def exports(kind: str):
 
         merchant.build_feed()
         return FileResponse(ex / "merchant_center.xml", filename="merchant_center.xml")
+    if kind == "bundle":
+        from . import fix_bundle
+
+        zip_p = fix_bundle.generate()
+        return FileResponse(zip_p, filename=Path(zip_p).name)
     return JSONResponse({"error": "unknown"}, 404)
+
+
+@app.get("/scan", response_class=HTMLResponse)
+def scan_page():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Free AI Visibility Audit — SEOForge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d16; color: #f8fafc; line-height: 1.5; padding: 40px 20px; }
+    .container { max-width: 680px; margin: 0 auto; }
+    .badge { display: inline-block; background: #1e293b; color: #38bdf8; border: 1px solid #38bdf844; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; margin-bottom: 20px; }
+    h1 { font-size: 36px; line-height: 1.2; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.5px; }
+    h1 span { color: #38bdf8; }
+    p.sub { font-size: 18px; color: #94a3b8; margin-bottom: 32px; }
+    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 28px; }
+    label { display: block; font-size: 14px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px; }
+    input[type=text], input[type=email] { width: 100%; padding: 12px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 15px; margin-bottom: 18px; outline: none; }
+    input:focus { border-color: #38bdf8; }
+    button.btn { width: 100%; background: #38bdf8; color: #090d16; font-size: 16px; font-weight: 700; padding: 14px; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+    button.btn:hover { background: #7dd3fc; }
+    .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 28px; }
+    .feat { background: #1e293b44; border: 1px solid #1e293b; padding: 14px; border-radius: 8px; font-size: 13px; color: #cbd5e1; }
+    .feat b { color: #38bdf8; display: block; margin-bottom: 4px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge">AI Visibility Engine</div>
+    <h1>Is Your Brand Invisible to <span>ChatGPT & Google AI</span>?</h1>
+    <p class="sub">Traditional SEO tools only track blue links. We audit your site across SEO, AEO, GEO, and AAO in 15 seconds.</p>
+    
+    <div class="card">
+      <form method="POST" action="/scan">
+        <label for="url">Your Website URL</label>
+        <input type="text" id="url" name="url" placeholder="https://yourbrand.com" required>
+        
+        <label for="email">Work Email (to receive fix report)</label>
+        <input type="email" id="email" name="email" placeholder="you@company.com" required>
+        
+        <button type="submit" class="btn">🚀 Run Free 4-Engine Visibility Audit</button>
+      </form>
+    </div>
+
+    <div class="features">
+      <div class="feat"><b>1. SEO Score</b>Title, meta, speed, and 3-click link depth.</div>
+      <div class="feat"><b>2. AEO Score</b>People Also Ask demand & FAQPage schema.</div>
+      <div class="feat"><b>3. GEO Score</b>ChatGPT, Claude, and Perplexity citation audit.</div>
+      <div class="feat"><b>4. AAO Score</b>AI shopping bot extraction & price visibility.</div>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+@app.post("/scan", response_class=HTMLResponse)
+def run_scan(url: str = Form(...), email: str = Form(...)):
+    from . import autopilot
+
+    target = url if url.startswith(("http://", "https://")) else f"https://{url}"
+    diag = autopilot.diagnose(target)
+    scores = diag.get("scores", {})
+    overall = diag.get("overall_score", 42)
+    issues = diag.get("critical_issues", [])
+
+    # Save lead
+    with db._conn() as conn:
+        conn.execute(
+            "INSERT INTO leads(email, site_url, score, details, created_at) VALUES (?,?,?,?,?)",
+            (email, target, overall, json.dumps(diag), db.now()),
+        )
+
+    issue_items = "".join(f"<li style='margin-bottom:8px'>⚠️ {iss}</li>" for iss in issues) or "<li>No critical violations detected.</li>"
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Visibility Score: {overall}/100 — SEOForge</title>
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d16; color: #f8fafc; line-height: 1.5; padding: 40px 20px; }}
+    .container {{ max-width: 680px; margin: 0 auto; }}
+    .score-box {{ background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 32px; text-align: center; margin-bottom: 24px; }}
+    .score-circle {{ font-size: 56px; font-weight: 800; color: #38bdf8; margin: 10px 0; }}
+    .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 24px 0; text-align: left; }}
+    .bar-item {{ background: #1e293b; padding: 14px; border-radius: 8px; }}
+    .bar-item b {{ display: block; font-size: 14px; margin-bottom: 6px; }}
+    .issues {{ background: #1e1b4b; border: 1px solid #3730a3; padding: 20px; border-radius: 8px; margin-bottom: 24px; }}
+    .cta-btn {{ display: block; width: 100%; background: #22c55e; color: #fff; text-align: center; font-size: 17px; font-weight: 700; padding: 16px; border-radius: 8px; text-decoration: none; }}
+    .cta-btn:hover {{ background: #16a34a; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="score-box">
+      <p style="color:#94a3b8">Visibility Audit for</p>
+      <h2 style="font-size:24px;margin-bottom:8px">{target}</h2>
+      <div class="score-circle">{overall}<span style="font-size:24px;color:#64748b">/100</span></div>
+      <p style="color:#cbd5e1">Diagnosed across traditional search, generative engines, and AI shopping assistants.</p>
+      
+      <div class="grid">
+        <div class="bar-item"><b>SEO: {scores.get('seo', {}).get('score', 0)}/100</b>Search Engine Optimization</div>
+        <div class="bar-item"><b>AEO: {scores.get('aeo', {}).get('score', 0)}/100</b>Answer Engine (PAA)</div>
+        <div class="bar-item"><b>GEO: {scores.get('geo', {}).get('score', 0)}/100</b>Generative AI Citations</div>
+        <div class="bar-item"><b>AAO: {scores.get('aao', {}).get('score', 0)}/100</b>Assistive Shopping Agents</div>
+      </div>
+    </div>
+
+    <div class="issues">
+      <h3 style="color:#a5b4fc;margin-bottom:12px">🚨 Critical AI Visibility Roadblocks:</h3>
+      <ul style="padding-left:20px;color:#e0e7ff">{issue_items}</ul>
+    </div>
+
+    <a href="/export/bundle" class="cta-btn">📦 Download Your Complete Fix Bundle (ZIP)</a>
+    <p style="text-align:center;font-size:13px;color:#64748b;margin-top:10px">Includes llms.txt, schema JSON-LD, robots directives, and Preferred Sources badge.</p>
+  </div>
+</body>
+</html>"""
+
+
+@app.get("/leads")
+def list_leads():
+    with db._conn() as conn:
+        rows = conn.execute("SELECT * FROM leads ORDER BY id DESC LIMIT 50").fetchall()
+    return JSONResponse([dict(r) for r in rows])
 
 
 def serve(host="127.0.0.1", port=8808):
