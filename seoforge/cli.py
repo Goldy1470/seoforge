@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime as dt
 import json
 from pathlib import Path
 
@@ -176,6 +177,19 @@ def main():
     sp = sub.add_parser("rubric-audit")
     sp.add_argument("url")
     sp.add_argument("--query", default="")
+    sub.add_parser("bot-connections")
+    sp = sub.add_parser("bot-connection-add")
+    sp.add_argument("kind")
+    sp.add_argument("--domain", action="append", default=[])
+    sp = sub.add_parser("bot-connection-revoke")
+    sp.add_argument("id", type=int)
+    sp = sub.add_parser("bot-ingest-file")
+    sp.add_argument("path")
+    sp.add_argument("--secret", required=True, help="the connection's sfb_ secret")
+    sp = sub.add_parser("bot-report")
+    sp.add_argument("--days", type=int, default=90)
+    sp.add_argument("--limit", type=int, default=20)
+    sub.add_parser("bot-prune")
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -462,6 +476,107 @@ def main():
         except (safe_fetch.FetchError, rubric_signals.AuditPageError) as e:
             print(f"failed: {getattr(e, 'code', getattr(e, 'status', '?'))} - {e}", file=sys.stderr)
             raise SystemExit(2)
+    elif cmd == "bot-connections":
+        from . import bot_ingest
+
+        with db._conn() as conn:
+            connections = bot_ingest.list_connections(conn)
+            month = db.now()[:7] + "-01"
+            usage_row = conn.execute(
+                "SELECT stored_events, counted_events, capped_at, raw_records, raw_capped_at"
+                " FROM bot_usage WHERE month=?",
+                (month,),
+            ).fetchone()
+        caps = bot_ingest.current_caps()
+        _out(
+            {
+                "connections": connections,
+                "usage": {
+                    "month": month,
+                    "stored": usage_row["stored_events"] if usage_row else 0,
+                    "counted": usage_row["counted_events"] if usage_row else 0,
+                    "capped_at": usage_row["capped_at"] if usage_row else None,
+                    "event_cap": caps["event_cap"],
+                    "raw": usage_row["raw_records"] if usage_row else 0,
+                    "raw_capped_at": usage_row["raw_capped_at"] if usage_row else None,
+                    "raw_cap": caps["raw_cap"],
+                },
+            },
+            full=True,
+        )
+    elif cmd == "bot-connection-add":
+        from . import bot_ingest, bot_sender_setup, bot_worker_script
+
+        if args.kind not in bot_ingest.CONNECTION_KINDS:
+            _out(
+                {"error": "invalid_kind",
+                 "message": f"kind must be one of {'|'.join(bot_ingest.CONNECTION_KINDS)}"},
+                full=True,
+            )
+            raise SystemExit(2)
+        if bot_ingest.current_caps()["event_cap"] == 0:
+            _out(
+                {"error": "locked",
+                 "message": "the bot report is off on this server (SEOFORGE_BOT_EVENT_CAP=0)"},
+                full=True,
+            )
+            raise SystemExit(2)
+        endpoint = bot_ingest.public_ingest_endpoint()
+        if not endpoint:
+            _out(
+                {"error": "not_set_up",
+                 "message": "SEOFORGE_PUBLIC_SERVER_URL is missing or not https"},
+                full=True,
+            )
+            raise SystemExit(2)
+        row = bot_ingest.create_connection(args.kind, args.domain or [])
+        _out(
+            {
+                "connection": {"id": row["id"], "kind": row["kind"],
+                               "domains": row["domains"], "created_at": row["created_at"]},
+                "secret": row["secret"],  # shown once; only its SHA-256 is stored
+                "endpoint": endpoint,
+                "worker_script": bot_worker_script.build_worker_script(endpoint) if row["kind"] == "cloudflare_worker" else None,
+                "worker_secret_name": bot_worker_script.WORKER_SECRET_NAME if row["kind"] == "cloudflare_worker" else None,
+                "logpush_job": bot_sender_setup.logpush_job(endpoint, row["secret"]) if row["kind"] == "cloudflare_logpush" else None,
+                "vercel_drain": bot_sender_setup.vercel_drain(endpoint, row["secret"]) if row["kind"] == "vercel_drain" else None,
+            },
+            full=True,
+        )
+    elif cmd == "bot-connection-revoke":
+        from . import bot_ingest
+
+        _out({"revoked": bot_ingest.revoke_connection(args.id)})
+    elif cmd == "bot-ingest-file":
+        from . import bot_ingest, bot_log_formats
+
+        data = (sys.stdin.buffer if args.path == "-" else Path(args.path)).read_bytes()
+        connection = bot_ingest.connection_for_secret(args.secret)
+        if connection is None:
+            _out({"error": "unknown_connection"}, full=True)
+            raise SystemExit(2)
+        try:
+            parsed = bot_log_formats.read_sender_body(connection["kind"], data)
+        except bot_log_formats.LogTooLargeError as e:
+            _out({"error": "too_large", "message": str(e)}, full=True)
+            raise SystemExit(2)
+        if connection["kind"] == "cloudflare_worker":
+            result = asyncio.run(bot_ingest.ingest_bot_requests(connection, parsed["requests"]))
+        else:
+            result = asyncio.run(
+                bot_ingest.ingest_log_file(connection, bot_ingest.log_file_hash(data), parsed)
+            )
+        _out({**result, "records": parsed["records"]}, full=True)
+    elif cmd == "bot-report":
+        from . import bot_ingest
+
+        since = (dt.date.today() - dt.timedelta(days=args.days)).isoformat()
+        with db._conn() as conn:
+            _out(bot_ingest.bot_report(conn, since=since, limit=args.limit), full=True)
+    elif cmd == "bot-prune":
+        from . import bot_ingest
+
+        _out(bot_ingest.prune_bot_events(), full=True)
 
 
 def _render_product(d: dict) -> str:

@@ -218,6 +218,71 @@ CREATE TABLE IF NOT EXISTS leads (
     )
 
 
+def _v4_bot_tables(conn: sqlite3.Connection) -> None:
+    """AI-bot log ingest (AT-010 style): connections with per-connection secrets
+    (only their SHA-256 stored), one row per verified bot request, bot x page x
+    day counters that always count (overflow folds onto '(other)' rows), the
+    month's usage caps, and log-file hashes that keep a resend from double
+    counting."""
+    conn.executescript(
+        """
+CREATE TABLE IF NOT EXISTS bot_connections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN ('cloudflare_worker', 'cloudflare_logpush', 'vercel_drain')),
+  secret_hash TEXT NOT NULL UNIQUE,
+  domains TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  last_event_at TEXT,
+  revoked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bot_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bot TEXT NOT NULL,
+  bot_type TEXT NOT NULL CHECK (bot_type IN ('training', 'search', 'user')),
+  page TEXT NOT NULL,
+  status INTEGER,
+  country TEXT,
+  occurred_at TEXT NOT NULL,
+  received_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS bot_events_time_idx ON bot_events (occurred_at);
+
+CREATE TABLE IF NOT EXISTS bot_daily (
+  day TEXT NOT NULL,
+  bot TEXT NOT NULL,
+  bot_type TEXT NOT NULL,
+  page TEXT NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0,
+  last_seen TEXT NOT NULL,
+  PRIMARY KEY (day, bot, page)
+);
+
+CREATE INDEX IF NOT EXISTS bot_daily_day_idx ON bot_daily (day);
+
+CREATE TABLE IF NOT EXISTS bot_usage (
+  month TEXT PRIMARY KEY,
+  stored_events INTEGER NOT NULL DEFAULT 0,
+  counted_events INTEGER NOT NULL DEFAULT 0,
+  raw_records INTEGER NOT NULL DEFAULT 0,
+  capped_at TEXT,
+  raw_capped_at TEXT,
+  alerted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bot_files (
+  connection_id INTEGER NOT NULL REFERENCES bot_connections(id) ON DELETE CASCADE,
+  body_hash TEXT NOT NULL,
+  received_at TEXT NOT NULL,
+  PRIMARY KEY (connection_id, body_hash)
+);
+
+CREATE INDEX IF NOT EXISTS bot_files_time_idx ON bot_files (received_at);
+"""
+    )
+
+
 def _v1_initial_schema(conn: sqlite3.Connection) -> None:
     # Upgrade pre-existing tables BEFORE running the script: index creation
     # inside _SCHEMA references columns a legacy table may not have yet.
@@ -235,6 +300,7 @@ MIGRATIONS: list = [
     (1, "initial schema (pages + crawl engine tables)", _v1_initial_schema),
     (2, "ai_bot_ranges cache for AI-operator published IP ranges", _v2_ai_bot_ranges),
     (3, "leads table for public scan conversions", _v3_leads_table),
+    (4, "bot ingest: connections, events, daily counters, usage caps, file claims", _v4_bot_tables),
 ]
 
 
