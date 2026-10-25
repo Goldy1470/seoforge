@@ -173,6 +173,9 @@ def main():
     sp.add_argument("--limit", type=int, default=3)
     sp = sub.add_parser("publish-repo")
     sp.add_argument("repo_path", nargs="?", default="")
+    sp = sub.add_parser("rubric-audit")
+    sp.add_argument("url")
+    sp.add_argument("--query", default="")
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -451,6 +454,14 @@ def main():
         from . import publisher
 
         _out(publisher.deploy_local_repo(args.repo_path or None), full=True)
+    elif cmd == "rubric-audit":
+        from . import rubric_signals
+
+        try:
+            _out(rubric_signals.audit_url(args.url, query=args.query or None), full=True)
+        except (safe_fetch.FetchError, rubric_signals.AuditPageError) as e:
+            print(f"failed: {getattr(e, 'code', getattr(e, 'status', '?'))} - {e}", file=sys.stderr)
+            raise SystemExit(2)
 
 
 def _render_product(d: dict) -> str:

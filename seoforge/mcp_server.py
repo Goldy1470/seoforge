@@ -247,6 +247,17 @@ def classify_ai_traffic(referrer: str = "", utm_source: str = "", utm_medium: st
 
 
 @mcp.tool()
+def rubric_audit(url: str, query: str = "") -> dict:
+    """48-signal AI-citation rubric audit of one page: 34 deterministic signals across 5 weighted categories (structure / authority / content / trust / E-E-A-T), scored with partial-coverage re-normalization; the 13 LLM-judged + brand-entity signals are listed as deferred. Persists a rubric_audit report."""
+    from . import rubric_signals
+
+    try:
+        return rubric_signals.audit_url(url, query=query or None)
+    except (FetchError, rubric_signals.AuditPageError) as e:
+        return {"error": getattr(e, "code", "audit_page_error"), "status": getattr(e, "status", None), "message": str(e)}
+
+
+@mcp.tool()
 def preferred_sources_audit(site: str = "") -> dict:
     """Google Preferred Sources audit: eligibility (fresh content, domain property, SGEA-in-GSC), official button snippet, checklist."""
     from . import preferred

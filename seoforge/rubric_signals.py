@@ -20,6 +20,7 @@ on a separate parse so the shared document keeps its JSON-LD blocks.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -1043,3 +1044,56 @@ DEFERRED_SIGNAL_KEYS = [
     "technical-terms", "case-study-evidence", "author-credentials",
     "byline-depth", "press-mentions", "brand-entity",
 ]
+
+
+# ------------------------------------------------------------------ audit
+
+
+def audit_url(raw_url, *, query: str | None = None) -> dict:
+    """One page's full rubric audit: build the context, run every implemented
+    signal, score, and persist a `rubric_audit` report.
+
+    Raises `AuditPageError` when the page can't be fetched into an auditable
+    state (bad URL, refused fetch, or an unrenderable status).
+    """
+    from . import db
+    from .rubric import (
+        RUBRIC_VERSION,
+        SIGNALS_BY_KEY,
+        run_signals,
+        score_audit,
+    )
+
+    ctx = asyncio.run(build_audit_context(raw_url, query=query))
+    results = run_signals(ctx)
+    score = score_audit(results)
+
+    signals = []
+    for row in results:
+        descriptor = SIGNALS_BY_KEY.get(row["key"]) or {}
+        signals.append(
+            {
+                "key": row["key"],
+                "label": descriptor.get("label", row["key"]),
+                "category": descriptor.get("category"),
+                "impactTier": descriptor.get("impactTier"),
+                "status": row["status"],
+                "score": row["score"],
+                "evidence": row["evidence"],
+            }
+        )
+
+    report = {
+        "version": RUBRIC_VERSION,
+        "url": ctx.url,
+        "page": {
+            "status": ctx.status_code,
+            "words": ctx.word_count,
+            "htmlBytes": ctx.html_bytes,
+        },
+        "score": score,
+        "signals": signals,
+        "deferred": list(DEFERRED_SIGNAL_KEYS),
+    }
+    report["report_id"] = db.save_report("rubric_audit", report)
+    return report

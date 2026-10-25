@@ -568,3 +568,71 @@ def test_run_signals_over_a_rich_page_keeps_rows_in_shape():
         assert row["status"] in {"pass", "warn", "fail", "na"}
         if row["status"] != "na":
             assert isinstance(row["score"], (int, float)) and 0 <= row["score"] <= 1
+
+
+# ------------------------------------------------------------- audit_url
+
+
+RICH_HTML = (
+    "<html><head>"
+    '<meta name="description" content="An honest guide to AI visibility for growing teams, covering audits">'
+    '<meta name="viewport" content="width=device-width">'
+    '<meta property="article:published_time" content="2025-09-01T08:00:00Z">'
+    '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article",'
+    '"author":{"name":"Jane Doe"},"headline":"A Complete Guide"}</script>'
+    '<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage",'
+    '"mainEntity":[{"name":"q0"},{"name":"q1"}]}</script>'
+    "</head><body>"
+    "<h1>A Complete Guide To AI Visibility For Teams</h1><h2>One</h2><h2>Two</h2><h2>Three</h2>"
+    "<ul><li>a</li><li>b</li><li>c</li></ul>"
+    '<a href="/one">1</a><a href="/two">2</a><a href="/three">3</a><a href="/four">4</a><a href="/five">5</a>'
+    '<a href="https://en.wikipedia.org/wiki/SEO">w</a><a href="https://www.nature.com">n</a>'
+    "<blockquote>We tested 12 tools and found gaps in every audit.</blockquote>"
+    "</body></html>"
+)
+
+
+def test_audit_url_runs_scores_and_persists(monkeypatch):
+    ctx = _ctx(RICH_HTML, robots_txt="User-agent: *\nAllow: /", llms_txt="# llms.txt\n\n## Guides\n- /guide")
+
+    async def fake_build(raw_url, *, query=None, client=None, now=None):
+        assert raw_url == "example.com/guide" or raw_url == "https://example.com/guide"
+        assert query == "how do I get cited"
+        return ctx
+
+    monkeypatch.setattr(rubric_signals, "build_audit_context", fake_build)
+
+    report = rubric_signals.audit_url("example.com/guide", query="how do I get cited")
+    assert report["url"] == "https://example.com/page"
+    assert len(report["signals"]) == 34
+    assert len(report["deferred"]) == 14
+    statuses = {s["status"] for s in report["signals"]}
+    assert statuses <= {"pass", "warn", "fail", "na"}
+    # categories all evaluated on this fixture page
+    cats = report["score"]["category_scores"]
+    assert all(c["evaluated"] > 0 for c in cats.values())
+    assert 0 <= report["score"]["total_score"] <= 1
+    labels = [s["label"] for s in report["signals"]]
+    assert all(labels)  # every signal row carries its descriptor label
+    assert {s["category"] for s in report["signals"]} == {"structure", "authority", "content", "trust", "eeat"}
+    # the report is persisted for history / the dashboard
+    from seoforge import db
+
+    with db._conn() as conn:
+        stored_row = conn.execute(
+            "SELECT payload FROM reports WHERE kind='rubric_audit' AND id=?",
+            (report["report_id"],),
+        ).fetchone()
+    stored = json.loads(stored_row["payload"])
+    assert stored["url"] == "https://example.com/page"
+    assert abs(stored["score"]["total_score"] - report["score"]["total_score"]) < 1e-9
+
+
+def test_audit_url_surfaces_audit_page_errors(monkeypatch):
+    async def fake_build(raw_url, **kwargs):
+        raise rubric_signals.AuditPageError(403, "Blocked by the site")
+
+    monkeypatch.setattr(rubric_signals, "build_audit_context", fake_build)
+    with pytest.raises(rubric_signals.AuditPageError) as err:
+        rubric_signals.audit_url("https://blocked.example/")
+    assert err.value.status == 403
