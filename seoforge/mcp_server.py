@@ -319,6 +319,28 @@ def bot_prune() -> dict:
 
 
 @mcp.tool()
+def outcomes_list(limit: int = 25) -> list:
+    """Measured outcome verdicts for closed work, newest first: per item the outcome word (improved/declined/no_meaningful_change/not_measurable) + the validation JSON (both 7-day windows, every metric pair, position verdicts). Movement measured after the work closed — never causality."""
+    from . import outcomes
+
+    return outcomes.list_outcomes(limit)
+
+
+@mcp.tool()
+def outcome_validate(opportunity_id: int) -> dict:
+    """Measure one closed work item once its 7-day after-window has finished: compare the before/after reads (GSC windows, rank snapshots, bot reads), record the verdict ONCE into History. Returns {"verdict": null, "note": ...} while the item is open or its window has not finished; a verdict already recorded stays answered."""
+    from . import outcomes
+
+    verdict = outcomes.validate_opportunity(opportunity_id)
+    if verdict is None:
+        return {
+            "verdict": None,
+            "note": "not ready: the work is not closed yet, or its 7-day after-window has not finished (nothing was written)",
+        }
+    return {"verdict": verdict}
+
+
+@mcp.tool()
 def ai_sources_list() -> dict:
     """AI-assistant source registry: every source we count traffic from (hosts, aliases, surfaces like ChatGPT Shopping), with the Bing /ck/a referrer gate flagged."""
     from . import ai_sources
