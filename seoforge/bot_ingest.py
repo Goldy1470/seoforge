@@ -240,6 +240,54 @@ def list_connections(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
+def connection_by_id(conn: sqlite3.Connection, connection_id: int) -> dict | None:
+    """The live connection an id names (the tools' way to pick one without
+    showing its secret); None when it is revoked or never was."""
+    row = conn.execute(
+        "SELECT id, kind, domains FROM bot_connections"
+        " WHERE id = ? AND revoked_at IS NULL",
+        (connection_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        domains = json.loads(row["domains"])
+    except (ValueError, TypeError):
+        domains = []
+    return {"id": row["id"], "kind": row["kind"], "domains": domains or []}
+
+
+def current_caps() -> dict:
+    """This server's caps as set right now (the connection list reads them)."""
+    return {
+        "event_cap": _cap_env("SEOFORGE_BOT_EVENT_CAP"),
+        "raw_cap": _cap_env("SEOFORGE_BOT_RAW_CAP"),
+    }
+
+
+def public_ingest_endpoint(env: dict | None = None) -> str | None:
+    """Where a connection sends its events: the server's public address
+    (`SEOFORGE_PUBLIC_SERVER_URL`), never the Host a request came in on. The
+    address is written into the site's Worker, Logpush job or drain, where it
+    is hard to change later. https only, but for localhost outside
+    production. None when it isn't set or can't be used."""
+    env = os.environ if env is None else env
+    try:
+        url = urlsplit(env.get("SEOFORGE_PUBLIC_SERVER_URL") or "")
+    except ValueError:
+        return None
+    hostname = url.hostname
+    if not hostname or not url.scheme:
+        return None
+    local = hostname in ("localhost", "127.0.0.1", "::1")
+    allowed = url.scheme == "https" or (
+        url.scheme == "http" and local and env.get("SEOFORGE_ENV") != "production"
+    )
+    if not allowed:
+        return None
+    return f"{url.scheme}://{url.netloc}/bots/ingest"
+
+
 # ------------------------------------------------------------ ingest
 
 

@@ -226,6 +226,99 @@ def ai_bot_verify(user_agent: str = "", ip: str = "") -> dict:
 
 
 @mcp.tool()
+def bot_connections_list() -> dict:
+    """AI-bot log ingest connections + this month's use: stored rows against the event cap, log senders' records against the raw cap."""
+    from . import bot_ingest, db
+
+    with db._conn() as conn:
+        connections = bot_ingest.list_connections(conn)
+        month = db.now()[:7] + "-01"
+        usage_row = conn.execute(
+            "SELECT stored_events, counted_events, capped_at, raw_records, raw_capped_at"
+            " FROM bot_usage WHERE month=?",
+            (month,),
+        ).fetchone()
+    caps = bot_ingest.current_caps()
+    return {
+        "connections": connections,
+        "usage": {
+            "month": month,
+            "stored": usage_row["stored_events"] if usage_row else 0,
+            "counted": usage_row["counted_events"] if usage_row else 0,
+            "capped_at": usage_row["capped_at"] if usage_row else None,
+            "event_cap": caps["event_cap"],
+            "raw": usage_row["raw_records"] if usage_row else 0,
+            "raw_capped_at": usage_row["raw_capped_at"] if usage_row else None,
+            "raw_cap": caps["raw_cap"],
+        },
+    }
+
+
+@mcp.tool()
+def bot_connection_create(kind: str, domains: list = []) -> dict:
+    """Make a bot-ingest connection (cloudflare_worker | cloudflare_logpush | vercel_drain): returns its secret once, the public endpoint and what to copy - the Worker source, a Cloudflare Logpush job config or a Vercel drain config."""
+    from . import bot_ingest, bot_sender_setup, bot_worker_script
+
+    endpoint = bot_ingest.public_ingest_endpoint()
+    if not endpoint:
+        return {
+            "error": "not_set_up",
+            "message": "SEOFORGE_PUBLIC_SERVER_URL is missing or not https, so senders have nowhere to post.",
+        }
+    if bot_ingest.current_caps()["event_cap"] == 0:
+        return {"error": "locked", "message": "the bot report is off on this server (SEOFORGE_BOT_EVENT_CAP=0)"}
+    row = bot_ingest.create_connection(kind, [d for d in domains if d])
+    return {
+        "connection": {"id": row["id"], "kind": row["kind"], "domains": row["domains"], "created_at": row["created_at"]},
+        "secret": row["secret"],  # shown once; only its SHA-256 is stored
+        "endpoint": endpoint,
+        "worker_script": bot_worker_script.build_worker_script(endpoint) if row["kind"] == "cloudflare_worker" else None,
+        "worker_secret_name": bot_worker_script.WORKER_SECRET_NAME if row["kind"] == "cloudflare_worker" else None,
+        "logpush_job": bot_sender_setup.logpush_job(endpoint, row["secret"]) if row["kind"] == "cloudflare_logpush" else None,
+        "vercel_drain": bot_sender_setup.vercel_drain(endpoint, row["secret"]) if row["kind"] == "vercel_drain" else None,
+    }
+
+
+@mcp.tool()
+def bot_connection_revoke(connection_id: int) -> dict:
+    """Revoke a bot-ingest connection (its past events stay readable)."""
+    from . import bot_ingest
+
+    return {"revoked": bot_ingest.revoke_connection(connection_id)}
+
+
+@mcp.tool()
+def bot_ingest_requests(connection_id: int, requests: list) -> dict:
+    """Verify and store one batch of bot requests (userAgent/ip/url/status/at/country) for a connection: page on the connection's domains, UA on the bot registry, IP in the operator's published ranges; written within the month's event cap (overflow folds onto '(other)' daily counters)."""
+    from . import bot_ingest, db
+
+    if not isinstance(requests, list):
+        return {"error": "invalid_request", "message": "requests must be a list"}
+    with db._conn() as conn:
+        connection = bot_ingest.connection_by_id(conn, connection_id)
+    if connection is None:
+        return {"error": "unknown_connection", "message": f"no live connection {connection_id}"}
+    return asyncio.run(bot_ingest.ingest_bot_requests(connection, requests))
+
+
+@mcp.tool()
+def bot_report(since: str = "", limit: int = 20) -> dict:
+    """AI bots reading the site: per type (training/search/user), per bot and top pages - read from bot x page x day counters that keep counting past the cap; alert waits until 30 days of data, then signals staleness (no live connection in 2 days, or search reads folding onto '(other)')."""
+    from . import bot_ingest, db
+
+    with db._conn() as conn:
+        return bot_ingest.bot_report(conn, since=since or None, limit=limit)
+
+
+@mcp.tool()
+def bot_prune() -> dict:
+    """Delete bot rows past their retention (events 90 days, daily counters 400, file hashes 7) in batches; run it daily."""
+    from . import bot_ingest
+
+    return bot_ingest.prune_bot_events()
+
+
+@mcp.tool()
 def ai_sources_list() -> dict:
     """AI-assistant source registry: every source we count traffic from (hosts, aliases, surfaces like ChatGPT Shopping), with the Bing /ck/a referrer gate flagged."""
     from . import ai_sources

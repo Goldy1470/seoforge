@@ -303,3 +303,91 @@ Task 2.2:
   builder with a pinned fake resolver, `audit_url` end-to-end + persistence).
 - Phase checks: `python -m seoforge.cli --help` lists `rubric-audit`;
   `import seoforge.mcp_server` registers `rubric_audit` (83 `@mcp.tool`).
+
+## Phase 4 (bot-log ingest) — COMPLETE
+
+### Tasks
+- **4.1 core** — migration 4 (`bot_connections` / `bot_events` / `bot_daily`
+  / `bot_usage` / `bot_files`) + `seoforge/bot_ingest.py`: page
+  normalization, connections + secrets (`sfb_` prefix, SHA-256 stored),
+  `_read_request` fact limits, `verify_requests`, the cap write with
+  `(other)` fold + crossed80-once, one-transaction file claim, batched
+  prune, and the wait/stale/on report. Committed `83224bc`.
+- **4.2 sender formats** — `seoforge/bot_log_formats.py` (magic-byte
+  gzip inflate to a 16 MB ceiling, 20 000-line cap
+  (`LogTooLargeError`), worker/logpush/vercel readers,
+  `read_sender_body`), `seoforge/bot_worker_script.py` (pass-through
+  edge worker, batch 100 + 10 s debounce, `passThroughOnException`;
+  secret read from the `SEOFORGE_BOT_SECRET` Worker Secret, never
+  inlined), `seoforge/bot_sender_setup.py` (LOGPUSH_FIELDS, `logpush_job`,
+  `vercel_drain`). Committed `8131888`.
+- **4.3 surfaces + docs** — dashboard `POST /bots/ingest` (bearer checked
+  before the body is read, kind-based readers, 413 `too_large` / 400
+  `unreadable_body` / 500 `ingest_failed`, duplicate answered 200) +
+  connections CRUD (400 bad kind / 403 locked / 503 not-set-up / 201 with
+  the secret-once payload); CLI `bot-connections`,
+  `bot-connection-add`, `bot-connection-revoke`, `bot-ingest-file`
+  (path or `-` = stdin), `bot-report`, `bot-prune`; MCP
+  `bot_connections_list`, `bot_connection_create`,
+  `bot_connection_revoke`, `bot_ingest_requests`, `bot_report`,
+  `bot_prune` (83 → 89 tools) + `connection_by_id` /
+  `current_caps` / `public_ingest_endpoint` helpers;
+  `.env.example` keys (`SEOFORGE_PUBLIC_SERVER_URL`, `SEOFORGE_ENV`,
+  `SEOFORGE_BOT_EVENT_CAP`, `SEOFORGE_BOT_RAW_CAP`); README +
+  notices rows; this section.
+
+### Deviations & decisions (code over plan)
+- **Verdict contract**: a request counts as verified when the verdict
+  carries a truthy `verified` with a string bot key (the shape
+  `ai_bots.verify_bot_request` returns) or a dict-shaped bot record.
+  Careful: the real verifier puts `bot` inside its *failure* verdicts too
+  (`{"reason": "unverified_ip", "bot": ...}`), so a truthy `bot` alone is
+  not a pass. Sync (offline fakes) and async (the real verifier)
+  verifiers are both accepted.
+- **Transaction split**: `_apply_verified` writes on the caller's open
+  transaction (no BEGIN/COMMIT); `_write_verified` wraps it in
+  `BEGIN IMMEDIATE` for the batch path. `ingest_log_file` verifies first
+  (a range fetch may touch the network and must not hold the write lock),
+  then opens one `BEGIN IMMEDIATE` folding duplicate check + claim + raw
+  count + write, so a failure leaves nothing behind and the sender's
+  retry reads as new.
+- **`DELETE ... LIMIT` → `DELETE WHERE id/rowid IN (SELECT ... LIMIT ?)`**
+  — stock SQLite has no LIMIT clause on DELETE.
+- **Time parsing thresholds**: numeric timestamps are told apart by size —
+  > 1e15 is nanoseconds (÷1e6), > 1e12 is milliseconds (as-is), else
+  seconds (×1000); ISO strings parse with millisecond precision. No upper
+  bound guard: the current epoch is ~1.79e18 ns, so a naive `> 1e18`
+  guard rejects valid data dumped by an earlier draft; a far-off time is
+  dropped by the +1 h / -7 d window instead.
+- **The parse loop never yields**: the reference slices its record loop
+  to keep the Node event loop responsive; Python's loop over ≤ MAX_BATCH
+  (500) records and the synchronous gzip inflate run inside one
+  event-loop step — no cooperative yield needed.
+- **`public_ingest_endpoint` ported into `bot_ingest.py`** (the reference
+  keeps it in `bot-ingest.js` too): `SEOFORGE_PUBLIC_SERVER_URL`, https
+  required, http allowed only for localhost/127.0.0.1/::1 while
+  `SEOFORGE_ENV` != "production"; the path from the URL is dropped —
+  `/bots/ingest` is fixed.
+- **`uncrawled` deferred**: `bot_report` returns `uncrawled: null` with an
+  explanatory note until the citation-tracking surfaces exist (Phase 6);
+  everything else of the reading (waiting → stale → on alert logic) is
+  live now, including the folded-search-reads staleness signal.
+- **Caps via env, single tenant**: no plan/brand tree; the usage row is
+  keyed by month alone; `SEOFORGE_BOT_EVENT_CAP` / `SEOFORGE_BOT_RAW_CAP`
+  (-1 unlimited, 0 = off) replace the reference's plan-guard lookups.
+- **Debranding trail**: secret prefix `sfb_` (reference: `abot_`), Worker
+  secret name `SEOFORGE_BOT_SECRET` (reference: `ANSVISOR_BOT_SECRET`),
+  endpoint env `SEOFORGE_PUBLIC_SERVER_URL` (reference:
+  `PUBLIC_SERVER_URL`); no reference branding in any string, docstring or
+  output across the new modules, routes, CLI and tools.
+
+### Toolchain
+- Suite: 285 tests passing offline - +25 task 4.1 (`tests/test_bot_ingest.py`),
+  +15 task 4.2 (`tests/test_bot_log_formats.py`), +15 task 4.3
+  (`tests/test_bot_surfaces.py`: TestClient routes, in-proc CLI runs,
+  MCP `.fn` tools; the default verifier stubbed offline everywhere; the
+  suite never touches `data/seoforge.db`).
+- Phase checks: `python -m pytest -q` green before every task commit;
+  README/notices/port-notes rows in the task 4.3 commit;
+  `python -m seoforge.cli --help` lists the six `bot-*` commands;
+  89 `@mcp.tool` decorators.

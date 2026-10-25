@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+
+import re
 
 from . import backlinks, crawler, db, internal_links, integrations, orchestrator, paa
 from .config import settings
@@ -422,6 +424,165 @@ def list_leads():
     with db._conn() as conn:
         rows = conn.execute("SELECT * FROM leads ORDER BY id DESC LIMIT 50").fetchall()
     return JSONResponse([dict(r) for r in rows])
+
+
+# ------------------------------------------------------------ bot report
+
+
+@app.post("/bots/ingest")
+async def bots_ingest(request: Request):
+    """POST /bots/ingest — AI-bot requests from the site's own edge. Public,
+    outside the dashboard: the sender is the site's Cloudflare or Vercel,
+    authenticated by its connection secret (Authorization: Bearer) before its
+    body is read, so a caller without one can't make the server take in
+    20 MB. The body is read by the connection's kind (bot_log_formats): a
+    Worker's JSON batch, a Logpush gzipped NDJSON file, or a Vercel drain's
+    log entries."""
+    import asyncio
+    import zlib
+
+    from . import bot_ingest, bot_log_formats
+
+    auth = request.headers.get("authorization") or ""
+    secret = re.sub(r"^Bearer\s+", "", auth, flags=re.I)
+    connection = bot_ingest.connection_for_secret(secret)
+    if not connection:
+        return JSONResponse({"error": "unknown_connection"}, status_code=401)
+    body = await request.body()
+    hash_ = None
+    try:
+        # Answered 200 so the sender stops resending what was read once.
+        if connection["kind"] != "cloudflare_worker":
+            hash_ = bot_ingest.log_file_hash(body)
+            with db._conn() as conn:
+                if bot_ingest.file_was_read(conn, connection["id"], hash_):
+                    return JSONResponse(
+                        {"received": 0, "verified": 0, "stored": 0, "duplicate": True}
+                    )
+        try:
+            parsed = bot_log_formats.read_sender_body(connection["kind"], body)
+        except bot_log_formats.LogTooLargeError as exc:
+            return JSONResponse(
+                {"error": "too_large", "message": str(exc)}, status_code=413
+            )
+        except (ValueError, zlib.error, UnicodeError):
+            return JSONResponse({"error": "unreadable_body"}, status_code=400)
+        # A capped or locked file is answered 200 too: a retry changes nothing.
+        if connection["kind"] == "cloudflare_worker":
+            result = await bot_ingest.ingest_bot_requests(connection, parsed["requests"])
+        else:
+            result = await bot_ingest.ingest_log_file(connection, hash_, parsed)
+        return JSONResponse({**result, "records": parsed["records"]})
+    except Exception:
+        return JSONResponse({"error": "ingest_failed"}, status_code=500)
+
+
+@app.get("/bots/connections")
+def bots_connections():
+    from . import bot_ingest
+
+    with db._conn() as conn:
+        connections = bot_ingest.list_connections(conn)
+        month = db.now()[:7] + "-01"
+        usage_row = conn.execute(
+            "SELECT stored_events, counted_events, capped_at, raw_records,"
+            " raw_capped_at FROM bot_usage WHERE month = ?",
+            (month,),
+        ).fetchone()
+    caps = bot_ingest.current_caps()
+    return JSONResponse(
+        {
+            "connections": connections,
+            "usage": {
+                "month": month,
+                "stored": usage_row["stored_events"] if usage_row else 0,
+                "counted": usage_row["counted_events"] if usage_row else 0,
+                "capped_at": usage_row["capped_at"] if usage_row else None,
+                "event_cap": caps["event_cap"],
+                # Log senders' records: past the raw cap the files are counted
+                # but not read, so the report stops until the month ends.
+                "raw": usage_row["raw_records"] if usage_row else 0,
+                "raw_capped_at": usage_row["raw_capped_at"] if usage_row else None,
+                "raw_cap": caps["raw_cap"],
+            },
+        }
+    )
+
+
+@app.post("/bots/connections")
+async def bots_create_connection(request: Request):
+    from . import bot_ingest, bot_sender_setup, bot_worker_script
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "Invalid request"}, status_code=400)
+    kind = payload.get("kind")
+    if kind not in bot_ingest.CONNECTION_KINDS:
+        return JSONResponse({"error": "Invalid request"}, status_code=400)
+    if bot_ingest.current_caps()["event_cap"] == 0:
+        return JSONResponse(
+            {
+                "error": "locked",
+                "message": "The bot report is off on this server (SEOFORGE_BOT_EVENT_CAP=0).",
+            },
+            status_code=403,
+        )
+    # Checked before a connection exists: one the sender can't reach is no use.
+    endpoint = bot_ingest.public_ingest_endpoint()
+    if not endpoint:
+        return JSONResponse(
+            {
+                "error": "not_set_up",
+                "message": "AI-bot connections are not set up on this server yet"
+                " (SEOFORGE_PUBLIC_SERVER_URL is missing or not https).",
+            },
+            status_code=503,
+        )
+    row = bot_ingest.create_connection(kind, payload.get("domains") or [])
+    return JSONResponse(
+        {
+            "connection": {
+                "id": row["id"],
+                "kind": row["kind"],
+                "domains": row["domains"],
+                "created_at": row["created_at"],
+            },
+            "secret": row["secret"],  # shown once; only its SHA-256 is stored
+            "endpoint": endpoint,
+            # what the person copies, with the secret in it once
+            "worker_script": (
+                bot_worker_script.build_worker_script(endpoint)
+                if kind == "cloudflare_worker"
+                else None
+            ),
+            "worker_secret_name": (
+                bot_worker_script.WORKER_SECRET_NAME if kind == "cloudflare_worker" else None
+            ),
+            "logpush_job": (
+                bot_sender_setup.logpush_job(endpoint, row["secret"])
+                if kind == "cloudflare_logpush"
+                else None
+            ),
+            "vercel_drain": (
+                bot_sender_setup.vercel_drain(endpoint, row["secret"])
+                if kind == "vercel_drain"
+                else None
+            ),
+        },
+        status_code=201,
+    )
+
+
+@app.delete("/bots/connections/{connection_id}")
+def bots_revoke_connection(connection_id: int):
+    from . import bot_ingest
+
+    if not bot_ingest.revoke_connection(connection_id):
+        return JSONResponse({"error": "Connection not found"}, status_code=404)
+    return Response(status_code=204)
 
 
 def serve(host="127.0.0.1", port=8808):
