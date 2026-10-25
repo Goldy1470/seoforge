@@ -203,6 +203,21 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set:
     return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 
 
+def _v3_leads_table(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT,
+  site_url TEXT,
+  score INTEGER,
+  details TEXT,
+  created_at TEXT
+);
+"""
+    )
+
+
 def _v1_initial_schema(conn: sqlite3.Connection) -> None:
     # Upgrade pre-existing tables BEFORE running the script: index creation
     # inside _SCHEMA references columns a legacy table may not have yet.
@@ -219,6 +234,7 @@ def _v1_initial_schema(conn: sqlite3.Connection) -> None:
 MIGRATIONS: list = [
     (1, "initial schema (pages + crawl engine tables)", _v1_initial_schema),
     (2, "ai_bot_ranges cache for AI-operator published IP ranges", _v2_ai_bot_ranges),
+    (3, "leads table for public scan conversions", _v3_leads_table),
 ]
 
 

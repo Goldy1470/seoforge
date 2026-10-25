@@ -43,7 +43,7 @@ def test_paa_plan():
 def test_directories():
     backlinks.load_directories()
     dirs = backlinks.list_directories()
-    assert len(dirs) == 73, f"expected 73, got {len(dirs)}"
+    assert len(dirs) == 75, f"expected 75, got {len(dirs)}"
     top = backlinks.list_directories(min_dr=80)
     assert {"Chrome Web Store", "GitHub Pages"} <= {d["name"] for d in top}
     backlinks.update_status("Product Hunt", "submitted")

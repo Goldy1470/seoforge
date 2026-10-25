@@ -9,9 +9,13 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def _load_env_file() -> None:
     env_file = ROOT / ".env"
-    if not env_file.exists():
+    try:
+        if not env_file.exists():
+            return
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except Exception:
         return
-    for line in env_file.read_text(encoding="utf-8").splitlines():
+    for line in lines:
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
