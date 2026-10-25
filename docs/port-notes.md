@@ -240,3 +240,66 @@ Task 2.2:
 - (Phase 6) scraper-backed provider for consumer AI surfaces — cost + ToS review.
 - (Phase 7) Postgres before first paying customers vs SQLite closed beta.
 - (Phase 5) outcome verdict wording shown to end users vs internal only.
+
+
+## Phase 3 (48-signal rubric) — COMPLETE
+
+### Tasks
+- **3.1 rubric data + scorer + engine** — `data/rubric.json` (48 signals, 5
+  weighted categories, all descriptor strings debranded + rewritten) and
+  `seoforge/rubric.py` (loader; `score_audit` partial-coverage +
+  re-normalization; `run_signals` engine with throw -> `na`). Committed
+  `a97a27c`.
+- **3.2 signals + context + product-description gate** —
+  `seoforge/rubric_signals.py` (`AuditContext` + `build_audit_context`
+  via the SSRF-safe fetcher + 34 `@Signal` evaluators + `DEFERRED_SIGNAL_KEYS`)
+  and `seoforge/product_description.py` (opening checker). Committed
+  `e08cf57` after the offline smoke pass, which caught one real bug
+  (`_STATISTIC.findall` returning tuples into `re.search` -> TypeError;
+  fixed with `finditer`).
+- **3.3 surfaces + docs** — `audit_url()` orchestration
+  (context -> signals -> score -> `db.save_report('rubric_audit', ...)`),
+  CLI `rubric-audit <url> [--query]` (`AuditPageError` / `FetchError`
+  -> stderr + exit 2), MCP `rubric_audit(url, query)`
+  (errors returned as `{error, status, message}`, like the crawl tool),
+  README + notices rows, this section.
+
+### Discrepancies & decisions (code over plan)
+- **Where the audit context fetch happens**: reference `context.js` uses
+  Scrape.do with `render: true` (page JS executes in a headless browser for
+  every audit). SEOForge's `build_audit_context` fetches raw HTML through
+  `safe_fetch` and renders nothing - the GPTBot view of the page, which is
+  the point of the audit. Recorded as a deliberate deviation; if render-quality
+  audits are ever needed, that is a browser-agent screenshot-style question
+  first (same ToS/cost bucket as the Phase-6 stop-and-ask).
+- **`ai-bot-access` matches SEOForge's registry, not the reference's
+  7-token list** - the evaluators read `ai_bots.all_bots()` (17 agents), so
+  the registry stays the single source of truth for who is tracked. The
+  reference test where `CCBot` is absent from a tracked group therefore
+  differs: here both agents in a shared group are named when blocked.
+- **`normalize_url` mirrors the JS URL parser's quirks, including the
+  lenient ones** - `ftp://host` prefix-free input becomes
+  `https://ftp/{rest}` (one regex case test); whitespace-in-host and
+  no-host inputs raise 400, exactly what `new URL` would reject.
+- **Deferred 14**: 13 LLM-judged signals + `brand-entity` are defined in
+  `DEFERRED_SIGNAL_KEYS` and returned as deferred lists by `audit_url`;
+  they never drag a score. This is the standing stop-and-ask (LLM keys /
+  provider ToS / cost per audit) - unblocking that decision lands Phase 3.5+
+  (`llm-signals.js` ports to one structured-output call).
+- **Upstream untested surface**: the user's execution modules
+  (`autopilot`/`auto_submit`/`fix_bundle`/`content_gen`/
+  `publisher`) were committed unmodified in five separate commits with the
+  suite kept green (their code ships no tests yet); `content_gen`'s env keys
+  and `publisher`'s targets are documented in `.env.example` (never
+  touching `.env`). Migration 3 (`leads`) + dashboard `/scan` lead
+  capture landed as their own commits with the test asserts updated.
+
+### Toolchain
+- Suite: 224 tests passing offline - +13 task 3.1 (`tests/test_rubric.py`),
+  +17 `tests/test_product_description.py` (reference fixture tables incl.
+  brand-story / Speedgoat / French-press, openingCut, productTypeWords,
+  attributesIn), +46 `tests/test_rubric_signals.py` (every signal's
+  threshold buckets, ai-bot-access group semantics, MockTransport context
+  builder with a pinned fake resolver, `audit_url` end-to-end + persistence).
+- Phase checks: `python -m seoforge.cli --help` lists `rubric-audit`;
+  `import seoforge.mcp_server` registers `rubric_audit` (83 `@mcp.tool`).

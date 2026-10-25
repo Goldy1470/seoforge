@@ -95,7 +95,7 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Google Search Console | `gsc.py` | striking-distance queries (pos 5–20), cannibalization, low CTR, URL inspection |
 | SERP + keyword data | `keywords.py` | DataForSEO SERP/PAA/keyword-ideas/backlinks, OpenSEO passthrough |
 | **PAA → question pages** (the highprimeco method — PAA box as a build list) | `paa.py` | `paa_tree`, `question_page_plan`, CSV export to build pages like `/free-guides` |
-| Backlinks: the 73 startup places | `backlinks.py` + `data/directories_73.csv` | tracker (todo→submitted→live), DR filter, digital-PR plan |
+| Backlinks: the 75 startup places | `backlinks.py` + `data/directories_73.csv` | tracker (todo→submitted→live), DR filter, digital-PR plan |
 | Browser work | `browser_agent.py` | browser-use: directory submissions, verify listings, SERP/PAA click-through, screenshots |
 | Internal linking | `internal_links.py` | graph + PageRank + orphans + TF-IDF anchor suggestions |
 | Faceted navigation | `facets.py` | classify params (facet/pagination/tracking) → noindex,follow / canonical / robots rules |
@@ -111,7 +111,9 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Live OpenSEO | `openseo.py` | hosted-MCP / API-key / self-host modes, setup commands, 12-skill bridge |
 | AEO/GEO funnel | `aeo.py` | found → answered → cited → recommended → chosen, category-wise scores + fixes, llms-full.txt |
 | **AI-bot registry** (who is really crawling you) | `ai_bots.py` | 17 tracked agents — 8 verified against the operators' published IP ranges (OpenAI, Anthropic, Perplexity), token-boundary UA matching, 24 h SQLite-cached range fetch through the SSRF-safe fetcher; `ai-bots` + `ai-bot-verify` CLI, `ai_bots_list` + `ai_bot_verify` MCP tools; per-type robots access (training vs search vs user) feeds the found-stage |
-| **AI-source classifier** (which assistant sent the visit) | `ai_sources.py` | 13 sources; host-or-subdomain or exact-alias matching (never substring — a random host with "claude" in it isn't AI traffic); referrer → utm_source order with Bing gated to its `/ck/a` redirect; surfaces by exact medium (ChatGPT Shopping = `utm_medium=feed`); RE2 GA4 pattern; `ai-sources` + `ai-classify` CLI, `ai_sources_list` + `classify_ai_traffic` MCP; the classifier the Phase-4 log ingest runs per line |
+| **AI-source classifier** (which assistant sent the visit) | `ai_sources.py` | 13 sources; host-or-subdomain or exact-alias matching (never substring - a random host with "claude" in it isn't AI traffic); referrer → utm_source order with Bing gated to its `/ck/a` redirect; surfaces by exact medium (ChatGPT Shopping = `utm_medium=feed`); RE2 GA4 pattern; `ai-sources` + `ai-classify` CLI, `ai_sources_list` + `classify_ai_traffic` MCP; the classifier the Phase-4 log ingest runs per line |
+| **48-signal AI-citation rubric** (what AI engines look for) | `rubric.py` + `rubric_signals.py` + `product_description.py` | 5 weighted categories — structure · authority · content · trust · E-E-A-T — 34 deterministic signals scored with partial-coverage re-normalization (the 13 LLM-judged + brand-entity signals are listed deferred, never drag the score); product-description opening gate (ChatGPT reads ~40 words / 250 chars — type + 2 key attributes or it warns); `rubric-audit <url>` CLI + `rubric_audit` MCP; every audit persists a `rubric_audit` report |
+| **Execution chain** (one URL in, work done out) | `autopilot.py` · `fix_bundle.py` · `auto_submit.py` · `content_gen.py` · `publisher.py` | 6-phase autopilot (discover → diagnose 4-engine scores → fixes → distribute → index → monitor); downloadable fix-bundle ZIP (suggested robots.txt, llms.txt+llms-full.txt, FAQ/Org schemas, Preferred Sources button, titles/metas CSV, PAA briefs, REPORT.md); batch directory submission with status tracking; PAA-scaffold → publication-ready articles (OpenAI/Gemini/Anthropic keys, offline structural fallback); WordPress/webhook/local-repo publishing |
 | Value vs Semrush | `value.py` | 16-module coverage matrix + $139.95 vs stack cost counter |
 | **Google Preferred Sources** (the 2026 sleeper) | `preferred.py` | eligibility audit (fresh content, domain property, SGEA-in-GSC) + official `Add to Preferred Sources` button embeds — badges in Top Stories **and** AI Overviews/AI Mode, ~2× CTR |
 | **Keyword-research playbook** (the 6 rules) | `research.py` | 1 audience problems (their words: GSC+PAA) → 2 broad seeds → 3 one-tool policy (never mix difficulty scores) → 4 intent (teach/compare/sell → page type) → 5 numbers (page / needs-edge / skip) → 6 clusters (one page per group, never compete with yourself) |
@@ -131,7 +133,7 @@ crawl DB (+sitemap xcheck)   │   impact ÷ effort    (opportunities table)
 DataForSEO volume            │   per opportunity:
 rank snapshots + watchlist    │   fix_title_meta · build_question_page ·
 CWV (PageSpeed)              │   promote_to_top5 · repair_cannibalization ·
-73-directory tracker         │   internal_link_orphan · cwv_speed ·
+73-directory tracker (75)    │   internal_link_orphan · cwv_speed ·
 AI citation reports          ┘   backlink_submission (DR≥70 first) · improve_ai_visibility
 ```
 
@@ -172,7 +174,7 @@ python -m seoforge.cli indexnow <url1> <url2> --key <key>   # push new pages to 
 python -m seoforge.cli ai-cite "best amazon agency for D2C brands"   # ChatGPT citation test
 python -m seoforge.cli add-product '{"id":"hp-1","title":"...","price":"2999","link":"...","image":"..."}'
 python -m seoforge.cli feed                       # merchant_center.xml
-python -m seoforge.cli dirs --min-dr 70           # highest-DR places from the 73 list
+python -m seoforge.cli dirs --min-dr 70           # highest-DR places from the 75-dir list
 python -m seoforge.cli dirs-update ProductHunt submitted
 python -m seoforge.cli pr                         # digital PR plan
 python -m seoforge.cli watch-add "best crm for d2c" --competitor hubspot.com
