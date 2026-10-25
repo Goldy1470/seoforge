@@ -106,6 +106,7 @@ open-source Ahrefs/Semrush alternative that also ships an MCP server; attach bot
 | Indexing push | `indexing.py` | IndexNow (Bing/Yandex/Seznam), Google sitemap ping, IndexNow key generator |
 | Sitemap hygiene | `indexing.py` | sitemap↔crawl crosscheck: 404s/noindex/thin/canonical drift, pages missing from sitemap |
 | Cross-source value layer | `integrations.py` | gsc cache + PAA + crawl + CWV + tracker + rank history → one scored opportunity queue |
+| **Outcome capture** (did the work help?) | `outcomes.py` | every closed opportunity gets measured once: two equal 7-day windows (one ending before the work was raised, one after it closed) read through the same data the other reports use — GSC clicks/impressions/position for its page and query, the rank-snapshot best position for its keyword, the AI-bot daily reads for its page; count metrics derive with a 5% noise floor (mixed movement reads improved), positions with the lower-is-better 0.5 rule; **unmeasured is never zero**; the verdict is recorded exactly once (`improved` / `declined` / `no_meaningful_change` / `not_measurable`) and reports movement, never causality; `mark_done` stamps the close + arms it, the daily `outcome_validation` job measures after the settling week; `outcomes` / `outcomes-validate` CLI, `outcomes_list` + `outcome_validate` MCP tools |
 | Scheduler | `scheduler.py` | nightly GSC delta, keyword watch, due-job tick + daemon |
 | Digests | `notify.py` | Slack webhook or saved report briefs |
 | Live OpenSEO | `openseo.py` | hosted-MCP / API-key / self-host modes, setup commands, 12-skill bridge |
@@ -151,6 +152,7 @@ the refresh-plan attached, instead of four disconnected reports you have to reco
 | `opps_refresh` | 12h | re-blend all sources into the queue |
 | `weekly_sitemap_check` | 7d | sitemap↔crawl reconciliation |
 | `serp_watch` | 24h | rank snapshots of watchlist keywords, you vs your named competitor |
+| `outcome_validation` | 24h | measure every closed opportunity whose 7-day after-window has finished, record the verdict once |
 
 `python -m seoforge.cli schedule --daemon` runs the loop in a terminal (or hook it into
 `cron`/`schtasks`/`systemd`). Every digest lands in Slack if `SLACK_WEBHOOK_URL` is set.
@@ -208,6 +210,8 @@ python -m seoforge.cli bot-connections             # connections + this month's 
 python -m seoforge.cli bot-ingest-file log.ndjson.gz --secret sfb_...   # read a log sender's file now (or `-` for stdin)
 python -m seoforge.cli bot-report --days 30        # who is reading your site: types/bots/top pages
 python -m seoforge.cli bot-prune                   # delete bot rows past their retention
+python -m seoforge.cli outcomes                    # measured verdicts for closed work (History's Result column)
+python -m seoforge.cli outcomes-validate           # measure every settled closed opportunity now (or one: <id>)
 python -m seoforge.cli serve                      # dashboard http://127.0.0.1:8808
 python -m seoforge.cli mcp                        # run MCP server for Codex/ChatGPT (stdio)
 ```
@@ -232,6 +236,7 @@ python -m seoforge.cli mcp                        # run MCP server for Codex/Cha
 - [x] v0.7 — technical SEO six rules: crawler captures viewport/render-blockers/JS-shell flags; 3-click structure BFS, js-shell crawlability, batch GSC index status, speed+mobile sweeps, sitemap keep/remove policy with Google+Bing submission; technical_audit MCP tool + work-queue wiring (72 tools)
 - [x] v0.8 — 48-signal AI-citation rubric: structure · authority · content · trust · E-E-A-T scored from 34 deterministic signals (13 LLM-judged listed deferred, never drag the score), `rubric-audit` CLI + `rubric_audit` MCP tool, product-description opening gate (83 tools)
 - [x] v0.9 — AI-bot log ingest: connections with once-shown secrets + generated Worker/Logpush/drain setup, offline verification against IP ranges, monthly event/raw caps with `(other)` fold-over, resend-proof file claims, wait/stale/on bot report; public `/bots/ingest` + connection CRUD, 6 CLI commands + 6 MCP tools (89 tools)
+- [x] v0.10 — outcome capture: every closed opportunity measured once with before/after 7-day windows (GSC + rank snapshots + bot reads), 5% count noise floor, lower-is-better position rule, unmeasured-never-zero, verdicts recorded once into History; `mark_done` arms + `outcome_validation` daily job, `outcomes`/`outcomes-validate` CLI + 2 MCP tools (91 tools)
 - [ ] JS-rendered crawl mode for SPA/Next sites via playwright
 - [ ] content generator: draft the question pages (title/H2/FAQ JSON-LD) with your LLM of choice
 - [ ] OpenAI-keyed AI-citation daily trend (citation position tracking in the funnel)

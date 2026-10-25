@@ -190,6 +190,10 @@ def main():
     sp.add_argument("--days", type=int, default=90)
     sp.add_argument("--limit", type=int, default=20)
     sub.add_parser("bot-prune")
+    sp = sub.add_parser("outcomes")
+    sp.add_argument("--limit", type=int, default=25)
+    sp = sub.add_parser("outcomes-validate")
+    sp.add_argument("id", nargs="?", type=int, default=0)
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -577,6 +581,29 @@ def main():
         from . import bot_ingest
 
         _out(bot_ingest.prune_bot_events(), full=True)
+
+    elif cmd == "outcomes":
+        from . import outcomes
+
+        _out(outcomes.list_outcomes(limit=args.limit), full=True)
+
+    elif cmd == "outcomes-validate":
+        from . import outcomes
+
+        if args.id:
+            verdict = outcomes.validate_opportunity(args.id)
+            _out(
+                verdict
+                if verdict is not None
+                else {
+                    "verdict": None,
+                    "note": "not ready: the work is not closed yet, or its 7-day"
+                    " after-window has not finished (nothing was written)",
+                },
+                full=True,
+            )
+        else:
+            _out(outcomes.sweep(), full=True)
 
 
 def _render_product(d: dict) -> str:
