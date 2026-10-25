@@ -296,11 +296,40 @@ def _v1_initial_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
 
 
+def _v5_outcome_measurements(conn: sqlite3.Connection) -> None:
+    """Outcome capture: when the work was closed, the measured verdict once
+    its after-window has finished (the before/after numbers stored next to
+    it as validation JSON), and an event trail so a measurement sits with
+    the work that preceded it."""
+    have = _table_columns(conn, "opportunities")
+    for name, decl in (
+        ("completed_at", "TEXT"),
+        ("outcome", "TEXT"),
+        ("validation", "TEXT"),
+        ("validated_at", "TEXT"),
+    ):
+        if name.lower() not in have:
+            conn.execute(f"ALTER TABLE opportunities ADD COLUMN {name} {decl}")
+    conn.executescript(
+        """
+CREATE TABLE IF NOT EXISTS opportunity_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  opportunity_id INTEGER,
+  event TEXT,
+  data TEXT,
+  at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_opp_events_opp ON opportunity_events(opportunity_id);
+"""
+    )
+
+
 MIGRATIONS: list = [
     (1, "initial schema (pages + crawl engine tables)", _v1_initial_schema),
     (2, "ai_bot_ranges cache for AI-operator published IP ranges", _v2_ai_bot_ranges),
     (3, "leads table for public scan conversions", _v3_leads_table),
     (4, "bot ingest: connections, events, daily counters, usage caps, file claims", _v4_bot_tables),
+    (5, "opportunity outcome capture: completion stamp, verdict, validation, event trail", _v5_outcome_measurements),
 ]
 
 

@@ -421,5 +421,22 @@ def queue(status: str = "open", kind: str = "", limit: int = 25) -> list[dict]:
 def mark_done(type_target: str) -> str:
     t, _, target = type_target.partition("|")
     with db._conn() as conn:
-        conn.execute("UPDATE opportunities SET status='done' WHERE type=? AND target=?", (t, target))
+        prior = conn.execute(
+            "SELECT id, status FROM opportunities WHERE type=? AND target=?", (t, target)
+        ).fetchone()
+        conn.execute(
+            "UPDATE opportunities SET status='done',"
+            " completed_at=COALESCE(completed_at, ?),"
+            " outcome=COALESCE(outcome, 'pending_measurement')"
+            " WHERE type=? AND target=?",
+            (db.now(), t, target),
+        )
+        # The close event marks the transition, not the repeat: re-stamping
+        # an already-done row stays an idempotent write.
+        if prior is not None and prior["status"] != "done":
+            from . import outcomes
+
+            outcomes.record_event(
+                conn, prior["id"], "opportunity_done", {"closedBy": "mark_done"}
+            )
     return f"{t} {target} -> done"
