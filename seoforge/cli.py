@@ -156,6 +156,23 @@ def main():
     sp.add_argument("--utm-source", default="")
     sp.add_argument("--utm-medium", default="")
     sp.add_argument("--landing", default="")
+    sp = sub.add_parser("autopilot")
+    sp.add_argument("url", nargs="?", default="")
+    sp.add_argument("--browser", action="store_true")
+    sp.add_argument("--phases", nargs="*", default=None)
+    sp = sub.add_parser("fix-bundle")
+    sp.add_argument("--out", default="")
+    sp = sub.add_parser("auto-submit")
+    sp.add_argument("--max", type=int, default=5)
+    sp.add_argument("--pause", type=int, default=10)
+    sp.add_argument("--status", action="store_true")
+    sp = sub.add_parser("write-article")
+    sp.add_argument("keyword")
+    sp.add_argument("--questions", nargs="*", default=None)
+    sp = sub.add_parser("batch-articles")
+    sp.add_argument("--limit", type=int, default=3)
+    sp = sub.add_parser("publish-repo")
+    sp.add_argument("repo_path", nargs="?", default="")
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -406,6 +423,34 @@ def main():
             _out({"source": None, "note": "not AI traffic (normal outcome for most visits)"})
         else:
             _out({"source": hit.source, "surface": hit.surface, "origin": hit.origin})
+    elif cmd == "autopilot":
+        from . import autopilot
+
+        _out(autopilot.run(args.url or None, skip_browser=not args.browser, phases=args.phases), full=True)
+    elif cmd == "fix-bundle":
+        from . import fix_bundle
+
+        path = fix_bundle.generate(args.out or None)
+        _out({"bundle_zip": path, "status": "generated"})
+    elif cmd == "auto-submit":
+        from . import auto_submit
+
+        if args.status:
+            _out(auto_submit.submit_status())
+        else:
+            _out(auto_submit.batch_submit(max_per_session=args.max, pause_seconds=args.pause))
+    elif cmd == "write-article":
+        from . import content_gen
+
+        _out(content_gen.generate_article(args.keyword, questions=args.questions), full=True)
+    elif cmd == "batch-articles":
+        from . import content_gen
+
+        _out(content_gen.batch_generate(limit=args.limit), full=True)
+    elif cmd == "publish-repo":
+        from . import publisher
+
+        _out(publisher.deploy_local_repo(args.repo_path or None), full=True)
 
 
 def _render_product(d: dict) -> str:

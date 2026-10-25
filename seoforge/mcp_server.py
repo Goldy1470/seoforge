@@ -655,6 +655,55 @@ def verify_listing(url: str) -> dict:
     return asyncio.run(browser_agent.verify_listing(url, settings.brand_name))
 
 
+@mcp.tool()
+def autopilot_run(site_url: str = "", skip_browser: bool = True) -> dict:
+    """Run the complete end-to-end autonomous pipeline (discover, diagnose 4-engines, fix bundle, distribute, index, monitor)."""
+    from . import autopilot
+
+    return autopilot.run(site_url or None, skip_browser=skip_browser)
+
+
+@mcp.tool()
+def fix_bundle_generate(output_dir: str = "") -> dict:
+    """Package all generated fixes (llms.txt, schemas, robots.txt, preferred button, titles CSV) into a downloadable ZIP."""
+    from . import fix_bundle
+
+    path = fix_bundle.generate(output_dir or None)
+    return {"bundle_zip": path, "status": "generated"}
+
+
+@mcp.tool()
+def directory_batch_submit(max_per_session: int = 5, pause_seconds: int = 10) -> dict:
+    """Batch-submit brand profile to backlink directories via automated browser agent."""
+    from . import auto_submit
+
+    return auto_submit.batch_submit(max_per_session=max_per_session, pause_seconds=pause_seconds)
+
+
+@mcp.tool()
+def directory_submit_status() -> dict:
+    """Current status counts across all 75 authority backlink directories."""
+    from . import auto_submit
+
+    return auto_submit.submit_status()
+
+
+@mcp.tool()
+def generate_article(keyword: str, questions: list = []) -> dict:
+    """Generate a complete 800-1200 word publication-ready guide targeting SEO and AI answer engines."""
+    from . import content_gen
+
+    return content_gen.generate_article(keyword, questions=list(questions) or None)
+
+
+@mcp.tool()
+def deploy_discovery_files(repo_public_dir: str = "") -> dict:
+    """Deploy llms.txt, llms-full.txt, and suggested robots.txt directly into a Next.js / Astro public folder."""
+    from . import publisher
+
+    return publisher.deploy_local_repo(repo_public_dir or None)
+
+
 def main():
     args = [a for a in sys.argv[1:] if a]
     if args and args[0] == "http":
