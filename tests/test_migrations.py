@@ -27,9 +27,10 @@ def test_fresh_db_reaches_full_schema():
             "schema_migrations", "pages", "links", "paa_questions", "directories",
             "products", "rank_snapshots", "gsc_cache", "watchlist", "opportunities",
             "schedule", "jobs", "reports", "leads",
+            "bot_connections", "bot_events", "bot_daily", "bot_usage", "bot_files",
         }
         versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations")]
-        assert versions == [1, 2, 3]
+        assert versions == [1, 2, 3, 4]
 
 
 def test_legacy_db_upgrades_to_current_schema():
@@ -41,9 +42,14 @@ def test_legacy_db_upgrades_to_current_schema():
     with db._conn() as conn:
         assert _columns(conn, "pages") == _expected_pages_columns()
         versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations")]
-        assert versions == [1, 2, 3]
+        assert versions == [1, 2, 3, 4]
         cache_cols = {r[1] for r in conn.execute("PRAGMA table_info(ai_bot_ranges)")}
         assert cache_cols == {"url", "prefixes_json", "fetched_at"}
+        bot_cols = {r[1] for r in conn.execute("PRAGMA table_info(bot_events)")}
+        assert bot_cols == {
+            "id", "bot", "bot_type", "page", "status", "country",
+            "occurred_at", "received_at",
+        }
 
 
 def test_apply_is_idempotent_on_reopen():
@@ -52,4 +58,4 @@ def test_apply_is_idempotent_on_reopen():
     assert first == []
     with db._conn() as conn:
         rows = conn.execute("SELECT count(*) c FROM schema_migrations").fetchone()
-        assert rows["c"] == 3
+        assert rows["c"] == 4
