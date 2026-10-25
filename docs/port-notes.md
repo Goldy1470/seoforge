@@ -391,3 +391,105 @@ Task 2.2:
   README/notices/port-notes rows in the task 4.3 commit;
   `python -m seoforge.cli --help` lists the six `bot-*` commands;
   89 `@mcp.tool` decorators.
+
+## Phase 5 (outcome capture) — COMPLETE
+
+### Tasks
+- **5.1 core** — migration 5 (`completed_at` / `outcome` / `validation` /
+  `validated_at` on `opportunities`, PRAGMA-guarded ALTERs, plus the
+  `opportunity_events` trail) + `seoforge/outcomes.py` (windows, verdict
+  rules, per-target reads, one-shot validation, sweep) + `mark_done`
+  stamping the close and arming the measurement + 20 kernel tests
+  (`tests/test_outcomes.py`). Committed `a4bac89`.
+- **5.2 surfaces** — scheduler `outcome_validation` job (kind `outcomes`,
+  24 h) + the `run_job` branch; CLI `outcomes` (measured verdicts) and
+  `outcomes-validate` (one id, or the whole sweep); MCP `outcomes_list`
+  and `outcome_validate` (89 → 91 tools); 7 surface tests
+  (`tests/test_outcome_surfaces.py`). Committed `69fa469`.
+- **5.3 docs** — README module-map row + schedule-table row + quickstart
+  lines + roadmap v0.10 (91 tools); notices derivation rows (outcomes,
+  the caller side, the tests); this section.
+
+### Deviations & decisions (code over plan)
+- **Scope**: the reference's `validate.js` verdict flow + the
+  `improve-outcome.js` position kernel + the `action-engine.js`
+  validation constants (windowDays 7, meaningfulChangeRatio 0.05).
+  `improve-outcome`'s full per-platform prompt-position sweep is deferred
+  to Phase 6 — it reads the `prompt_results` data layer (per-run
+  per-platform AI-visibility runs) SEOForge does not have yet.
+- **Mapping**: reference `actions` → the scored `opportunities` row;
+  `action_events` → `opportunity_events`; the reference's per-brand KPI
+  basket (ai_visibility, sov, citations…) → the site's own time series:
+  GSC clicks/impressions/position for the target's page (and its named
+  query), the site's own best `rank_snapshots` position for its keyword
+  (registrable-domain match via the crawler's offline PLS rules), and the
+  Phase-4 `bot_daily` read counters — the bot report becomes a
+  measurable source the same session it was built.
+- **Windows**: before = 7 days ending the day before the work was
+  raised; after = 7 days starting the day after it closed; wait =
+  window + 1 (`VALIDATION_WAIT_DAYS`), and validate refuses while
+  `after[1] >= today` — a still-running window reads low and would file
+  recent work as a decline. The measurement grain is `yyyy-mm-dd` day
+  strings on a UTC clock — windows, cutoffs and window-membership
+  compares are plain string compares, never timestamp math.
+- **Unmeasured ≠ zero**: no data in a window → `None`, never 0. Nothing
+  measured at all → `not_measurable` with `validation` left NULL (no
+  invented numbers). Legacy done rows without `completed_at` →
+  `not_measurable` once; rows without `created_at` likewise. Still-open
+  or not-yet-settled rows → `None` (not ready, nothing written). The
+  one real-zero exception is deliberate: `bot_reads` for a page that
+  *has* a key but no reads that window is a measured 0 — the counter
+  exists and says zero — so a page-target row with only bot data
+  available reads `no_meaningful_change`, not `not_measurable`. The
+  surfaces tests first assumed otherwise and were corrected to match
+  the kernel, not the reverse.
+- **Fold rule**: the count derivation leads. When nothing countable was
+  measured, the position verdicts fold (`outcome_from_verdicts`); when
+  counts read `no_meaningful_change` but a position moved, movement
+  wins (`improved`) — mixed movement is never hidden; and a *measured
+  declined count stands* even when a position improved.
+- **`gsc.extra` override**: `gsc.query` spreads `extra` after
+  `_date_range`, so `gsc_window_rows` passes explicit `startDate` /
+  `endDate` per window without touching `gsc.py` — and without moving
+  the dashboard's own 3-day-lag default. GSC matching is bucket-based:
+  the page bucket via `normalize_page_path` (scheme/host/query/fragment/
+  trailing slash gone, lowercased), a named query filtering to that
+  query's rows, and a query-only target matching every page the query
+  lands on. GSC read failures — including a disconnected property —
+  read as unmeasured, so `SystemExit` (a `BaseException`, not an
+  `Exception`) is caught explicitly; the first draft's bare
+  `except Exception` let it escape.
+- **Idempotency**: a verdict is recorded once — `validate_opportunity`
+  early-returns an already-answered (non-pending) outcome without
+  writing; the sweep's WHERE clause backs that. `mark_done` stamps
+  `completed_at` via COALESCE (a re-close never moves the windows) and
+  records the `opportunity_done` event only on the open→done
+  transition, so History shows the close once.
+- **`target_parts` is type-aware**: the cannibalization rule writes the
+  bare query as its target (`primary["page"] or q`), so a non-URL,
+  non-path target with no scheme parse is treated as a query *for that
+  type only* — free text like `ProductHunt (DR 90)` stays a target with
+  no measurable object instead of being guessed into a fake query.
+- **Trail stamps**: `opportunity_events.at` uses the wall clock
+  (`db.now()`); piping the pinned measurement *date* into the event
+  row originally tripped sqlite3's deprecated date-to-text adapter —
+  the day only belongs in the `measuredAt` data field.
+- **Sweep shape**: `LIMIT 500` oldest-close-first, best-effort per row,
+  unexpected per-row errors count as `failed` and never stop the rest.
+- **Verdict wording**: `improved` / `declined` / `no_meaningful_change`
+  / `not_measurable` mirror the reference's outcome vocabulary; the
+  "end-user words vs internal words" stop-and-ask stays open (asked in
+  the phase report with History-column examples).
+
+### Toolchain
+- Suite: 312 tests passing offline — +20 task 5.1 (`tests/test_outcomes.py`:
+  window math, both verdict rules at the floor boundaries, target parts,
+  GSC buckets, rank/bot reads, one-shot validation, sweep, mark_done),
+  +7 task 5.2 (`tests/test_outcome_surfaces.py`: the default job, the
+  sweep job through the real kernel, CLI and MCP round trips);
+  `tests/test_migrations.py` steady at 3. GSC window reads are faked
+  everywhere; the suite never touches `data/seoforge.db`.
+- Phase checks: `python -m pytest -q` green before every task commit;
+  README/notices/port-notes rows in the task 5.3 commit;
+  `python -m seoforge.cli --help` lists `outcomes` / `outcomes-validate`;
+  91 `@mcp.tool` decorators.
