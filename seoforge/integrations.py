@@ -259,28 +259,55 @@ def _backlink_directories(min_dr=70) -> list[dict]:
 
 
 def _ai_visibility_gap() -> list[dict]:
-    with db._conn() as conn:
-        row = conn.execute("SELECT payload FROM reports WHERE kind='ai_citation_check' ORDER BY id DESC LIMIT 1").fetchone()
-    if not row:
-        return []
-    data = json.loads(row["payload"])
-    if data.get("cited", 0) > 0:
-        return []
-    return [
-        {
-            "type": "improve_ai_visibility",
-            "target": "brand not cited in AI answers",
-            "impact": 8,
-            "effort": 3,
-            "sources": ["geo"],
-            "evidence": {
-                "questions_asked": data.get("total"),
-                "cited": data.get("cited"),
-                "why": "zero brand citations on buying questions you tested",
-                "action": "ship FAQPage question pages + llms.txt; get listed in the AI directories from the 73 list (There's an AI for That, Toolify)",
-            },
-        }
-    ]
+    """One `improve_ai_visibility` item per tracked prompt whose 7-day
+    state is weak: not_mentioned, mentioned_late or not_cited. The target
+    is the prompt's text — the prompt-positions sweep then owns these
+    rows' outcome, so the fix is prompt-shaped work it can measure.
+
+    no_runs raises nothing: with no recorded answers there is nothing to
+    improve yet, only pastes to catch up on."""
+    import datetime as dt
+
+    from . import prompts
+
+    today = prompts._today()
+    window = prompts.outcome_window(today)
+    items: list[dict] = []
+    for prompt in prompts.list_prompts():
+        states = prompts.platform_states(
+            prompt["id"], since=window["from"], until=today.isoformat()
+        )
+        weak = [
+            s for s in states
+            if s.get("state") in ("not_mentioned", "mentioned_late", "not_cited")
+        ]
+        if not weak:
+            continue
+        unmentioned = any(s["state"] == "not_mentioned" for s in states)
+        items.append(
+            {
+                "type": "improve_ai_visibility",
+                "target": prompt["text"],
+                "impact": 8 if unmentioned else 6,
+                "effort": 2,
+                "sources": ["geo"],
+                "evidence": {
+                    "prompt": prompt["text"],
+                    "platforms": {
+                        s["platform"]: {"state": s["state"], "runs": s.get("runs")}
+                        for s in weak
+                    },
+                    "why": "; ".join(
+                        f'{s["platform"]}: {s["state"]}' for s in weak
+                    ),
+                    "action": (
+                        "build a question page for this prompt, refresh llms.txt,"
+                        " collect fresh answers, re-verify the positions"
+                    ),
+                },
+            }
+        )
+    return items
 
 
 def _dedupe_score(items: list[dict]) -> list[dict]:

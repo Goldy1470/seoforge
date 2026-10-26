@@ -324,12 +324,54 @@ CREATE INDEX IF NOT EXISTS idx_opp_events_opp ON opportunity_events(opportunity_
     )
 
 
+def _v6_prompts(conn: sqlite3.Connection) -> None:
+    """Citation tracking: prompts tracked in AI answers plus the per-run
+    results — one row per answer, parsed at record time (deterministic,
+    no LLM). Append-only: same argument as the outcome windows before it,
+    every prompt's baseline is made of rows that never change."""
+    conn.executescript(
+        """
+CREATE TABLE IF NOT EXISTS prompts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  text TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'manual',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS prompts_text_idx ON prompts (text);
+
+CREATE TABLE IF NOT EXISTS prompt_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  prompt_id INTEGER NOT NULL REFERENCES prompts(id),
+  platform TEXT NOT NULL,
+  at TEXT NOT NULL,
+  response TEXT NOT NULL DEFAULT '',
+  citations TEXT NOT NULL DEFAULT '[]',
+  mention_count INTEGER NOT NULL DEFAULT 0,
+  citation_count INTEGER NOT NULL DEFAULT 0,
+  sentiment TEXT NOT NULL DEFAULT 'neutral',
+  visibility_score REAL,
+  mention_position INTEGER,
+  mentioned_entity_count INTEGER,
+  competitor_mentions TEXT NOT NULL DEFAULT '[]',
+  competitors TEXT NOT NULL DEFAULT '[]',
+  source TEXT NOT NULL DEFAULT 'manual'
+);
+
+CREATE INDEX IF NOT EXISTS prompt_results_prompt_idx
+  ON prompt_results (prompt_id, platform, at);
+"""
+    )
+
+
 MIGRATIONS: list = [
     (1, "initial schema (pages + crawl engine tables)", _v1_initial_schema),
     (2, "ai_bot_ranges cache for AI-operator published IP ranges", _v2_ai_bot_ranges),
     (3, "leads table for public scan conversions", _v3_leads_table),
     (4, "bot ingest: connections, events, daily counters, usage caps, file claims", _v4_bot_tables),
     (5, "opportunity outcome capture: completion stamp, verdict, validation, event trail", _v5_outcome_measurements),
+    (6, "prompts + prompt_results: tracked prompts, pasted-in AI answers with parsed citation metrics", _v6_prompts),
 ]
 
 

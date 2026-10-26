@@ -493,3 +493,111 @@ Task 2.2:
   README/notices/port-notes rows in the task 5.3 commit;
   `python -m seoforge.cli --help` lists `outcomes` / `outcomes-validate`;
   91 `@mcp.tool` decorators.
+
+## Phase 6 (citation tracking + prompt positions) — COMPLETE
+
+### Tasks
+- Task 6.1 (`90f0a51`) — the prompt kernel (`seoforge/prompts.py`,
+  migration 6: `prompts` + `prompt_results`, both append-only):
+  buying questions tracked verbatim and idempotent by text, the fixed
+  7-platform answer vocabulary, deterministic parse at record time
+  (mentions, first-mention position, own-domain citations via
+  host-or-subdomain matching, visibility score with half-up rounding,
+  sentiment, per-competitor citation counts), per-platform 7-day
+  states, the PAA + watchlist seed loader, part of the prompt seed
+  tests (`tests/test_prompts.py`).
+- Task 6.2 (`f3bf5cb`) — the outcome machinery: `outcome_sweep` (lazy
+  immutable baseline ending the day before the work was raised,
+  interim current-window refresh while open or inside the 30 tracking
+  days, day-30 final verdict recorded once with a
+  `position_outcome_recorded` event), `bot_ingest._cited_not_crawled`
+  and the alert-gated report (an honest empty list when nothing is
+  cited but unread), the per-prompt `improve_ai_visibility` gap queue
+  in `integrations.py` replacing the stale whole-report lane, and the
+  daily `prompt_positions` scheduler job (`tests/test_prompt_wiring.py`;
+  one Phase-4 bot-report test contract updated: `uncrawled` answers
+  `[]` + an explicit `uncrawled_count` when the alert is on).
+- Task 6.3 (`1d204fc`) — the surfaces + docs:
+  `prompts-add` / `prompts-list` / `answer-record` (space- or
+  comma-separated citation URLs, `--sentiment`, `--at`) /
+  `prompt-states` (one prompt or all) / `prompt-sweep` CLI commands;
+  `prompt_create` / `prompt_record_answer` / `prompt_states` /
+  `prompt_gap` MCP tools (91 → 95); README roadmap + feature-table
+  rows; THIRD_PARTY_NOTICES derivation rows; this section
+  (`tests/test_prompt_surfaces.py`, 4 tests).
+- Task 6.4 (this commit) — the Brave submit lane: no `data/ai_bots.json`
+  entry (decision below); `browser_agent.brave_submit_url` fills
+  Brave's documented re-fetch form (`search.brave.com/submit-url`) with
+  browser-use and always reports what the page answered;
+  `indexing.brave_submit` is the graceful handoff — manual steps when
+  the browser agent is not installed, `invalid` for non-URLs, an honest
+  `failed` status when the page refuses — carrying the three
+  operator-documented facts as guidance; `brave-submit` CLI +
+  `brave_submit` MCP tool (95 → 96); `tests/test_brave_submit.py`
+  (+4, fixture-faked agent, no page ever opened).
+
+### Decisions & deviations (code over plan)
+- No Bravebot entry in `data/ai_bots.json`: Brave's own crawler page
+  documents that the crawler "does not advertise a differentiated user
+  agent", and ingest verification compiles registry user-agent tokens —
+  a fabricated token would make every bot-report attribution a
+  fiction. The registry stays verification-only; the submit lane
+  carries the documented facts instead (Googlebot-crawlability gate,
+  robots.txt vs noindex split, nothing attributable in the report).
+- Live AI-answer fetching is deliberately deferred: an answer enters
+  as a manual paste-in (`source='manual'`) and is parsed by exactly
+  the rules a fetched answer would get. No surface pretends to ask
+  ChatGPT — `ai_citation_check` (Phase 1) stays the scripted lane;
+  prompt positions stay the measured-what-you-paste lane.
+- The platform list is a fixed, versioned 7-entry constant
+  (`PLATFORMS`, shopping surfaces excluded as the reference's own
+  Insights decision did) — no per-user platform configuration in this
+  phase; naming a platform never fetches one.
+- Single-tenant collapses: brand identity comes from settings (name +
+  the site's registrable domain via `outcomes.site_domain`) instead of
+  the reference's brand rows; one prompt namespace, one citation
+  namespace.
+- Rounding parity kept where Task 6.1 verified it: the visibility
+  score uses the reference's half-up integer rounding
+  (`_round_half_up`), the mention-rate cut sits at the same 0.5, and
+  the position-change floor is the same 0.5 — floors and boundaries
+  have dedicated tests.
+- Own-domain citation matching is exact host or subdomain
+  (`host == d or host.endswith("." + d)`); the reference's withdrawn
+  substring check never carried over (it matched the brand inside
+  other sites' paths).
+- Surfaces map kernel `ValueError`s (unknown platform, unknown prompt,
+  empty text) to `{"error": "invalid", ...}` answers instead of raising
+  through CLI/MCP; the kernel keeps raising for programmatic callers.
+- Unported on purpose: the reference completions flow ("Padre") and
+  the prompt-improve UI helpers — SEOForge's product surface here is
+  the CLI/MCP set plus the dashboard, not the reference's app screens.
+- The Phase-4 bot-report contract updated in Task 6.2 is a deliberate
+  breaking-shape change recorded above: `uncrawled` is a list, and
+  `uncrawled_count` was added, so honest readings do not hide behind a
+  placeholder `None`.
+
+### Toolchain
+- Suite as observed after each run: 312 through Phase 5; 379 after
+  Task 6.2 (earlier per-task sums drifted by 3 test-collection
+  differences attributed to `test_execution.py` pickup — the observed
+  full-suite count after every run is the only baseline); 383 after
+  Task 6.3 (+4 `tests/test_prompt_surfaces.py`: CLI round trips for
+  the five commands, MCP round trips including every invalid path, the
+  seven-platform `no_runs` state grid, the gap raising only weak
+  states); 387 after Task 6.4 (+4 `tests/test_brave_submit.py`: the
+  no-browser handoff with the manual steps, the invalid-URL answer,
+  the agent-filled origin default, the honest failure path, and CLI/MCP
+  round trips). GSC, AI-answer fetching and the browser agent are
+  faked or stubbed everywhere; the suite never touches
+  `data/seoforge.db` and never opens the submit page.
+- Phase checks: `python -m pytest -q` green before every commit;
+  README/port-notes rows in the task 6.4 commit (the Brave lane is
+  SEOForge-original — no third-party derivation, no notices row);
+  `python -m seoforge.cli --help` lists `prompts-add` / `prompts-list`
+  / `answer-record` / `prompt-states` / `prompt-sweep` /
+  `brave-submit`; 96 `@mcp.tool` decorators.
+- Clock pinning: prompt tests monkeypatch `prompts._today` (the sweep
+  additionally accepts `now=`, the scheduler calls it bare with its
+  defaults); the scheduler's bot-report keeps the real clock and its
+  tests seed stamps from `dt.date.today()`, as Phase 4 does.

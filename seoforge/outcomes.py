@@ -459,6 +459,13 @@ def validate_opportunity(opportunity_id: int, *, now: dt.date | None = None) -> 
             # Answered stays answered: the verdict was recorded once, and a
             # re-ask reports it without writing again.
             return row["outcome"]
+        if row["type"] == "improve_ai_visibility":
+            # Citation tracking's rows are the prompt-positions sweep's to
+            # measure (a 7-day read per platform ending day 30 after
+            # close, in prompts.outcome_sweep) — the GSC windows below
+            # would find nothing for a prompt-shaped target and file
+            # not_measurable over them. Nothing is written here.
+            return None
         try:
             evidence = json.loads(row["evidence"] or "{}") or {}
         except ValueError:
@@ -591,6 +598,7 @@ def sweep(now: dt.date | None = None) -> dict:
         rows = conn.execute(
             "SELECT id FROM opportunities"
             " WHERE status = 'done' AND completed_at IS NOT NULL"
+            " AND type != 'improve_ai_visibility'"
             " AND SUBSTR(completed_at, 1, 10) <= ?"
             " AND (outcome IS NULL OR outcome = ?)"
             " ORDER BY completed_at LIMIT 500",

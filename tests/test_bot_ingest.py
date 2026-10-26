@@ -527,7 +527,10 @@ def test_bot_report_buckets_and_windows():
     assert bots["gptbot"]["hits"] == 15 and bots["gptbot"]["bot_type"] == "training"
     assert report["pages"][0]["page"] == "/pricing" and report["pages"][0]["hits"] == 15
     assert report["pages"][0]["training_last"] == stamp(_day(3))
-    assert report["uncrawled"] is None
+    # the alert is on; with nothing cited yet the honest reading is an empty
+    # list, not a placeholder (full prompt tracking replaces the old null)
+    assert report["uncrawled"] == []
+    assert report["uncrawled_count"] == 0
     # a narrower window drops the old day
     with db._conn() as conn:
         recent = bot_ingest.bot_report(conn, since=_day(10))

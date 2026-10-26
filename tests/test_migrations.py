@@ -28,9 +28,10 @@ def test_fresh_db_reaches_full_schema():
             "products", "rank_snapshots", "gsc_cache", "watchlist", "opportunities",
             "schedule", "jobs", "reports", "leads",
             "bot_connections", "bot_events", "bot_daily", "bot_usage", "bot_files",
+            "prompts", "prompt_results",
         }
         versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations")]
-        assert versions == [1, 2, 3, 4, 5]
+        assert versions == [1, 2, 3, 4, 5, 6]
 
 
 def test_legacy_db_upgrades_to_current_schema():
@@ -42,7 +43,7 @@ def test_legacy_db_upgrades_to_current_schema():
     with db._conn() as conn:
         assert _columns(conn, "pages") == _expected_pages_columns()
         versions = [r[0] for r in conn.execute("SELECT version FROM schema_migrations")]
-        assert versions == [1, 2, 3, 4, 5]
+        assert versions == [1, 2, 3, 4, 5, 6]
         cache_cols = {r[1] for r in conn.execute("PRAGMA table_info(ai_bot_ranges)")}
         assert cache_cols == {"url", "prefixes_json", "fetched_at"}
         bot_cols = {r[1] for r in conn.execute("PRAGMA table_info(bot_events)")}
@@ -56,6 +57,7 @@ def test_legacy_db_upgrades_to_current_schema():
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}
         assert "opportunity_events" in tables
+        assert "prompts" in tables and "prompt_results" in tables
 
 
 def test_apply_is_idempotent_on_reopen():
@@ -64,4 +66,4 @@ def test_apply_is_idempotent_on_reopen():
     assert first == []
     with db._conn() as conn:
         rows = conn.execute("SELECT count(*) c FROM schema_migrations").fetchone()
-        assert rows["c"] == 5
+        assert rows["c"] == 6
