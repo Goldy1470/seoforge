@@ -710,19 +710,59 @@ def prune_bot_events(now=None) -> dict:
 # ------------------------------------------------------------- report
 
 
+def _cited_not_crawled(conn: sqlite3.Connection, since_day: str) -> tuple[list[dict], int]:
+    """The reference's uncrawled alert, on the alert's 'on' semantics:
+    pages an AI answer cited (prompt_results rows in the 30-day window,
+    own-domain citations only) that no search-type bot read in the same
+    30 days. Ranked by citations, capped at 10; the count reports all of
+    them, not just the capped ten."""
+    from . import prompts
+
+    is_own = prompts.own_domain_matcher(prompts.brand()["domains"])
+    counts: dict[str, int] = {}
+    for row in conn.execute(
+        "SELECT citations FROM prompt_results WHERE substr(at, 1, 10) >= ?", (since_day,)
+    ).fetchall():
+        try:
+            cites = json.loads(row["citations"] or "[]")
+        except (ValueError, TypeError):
+            cites = []
+        for cite in cites:
+            url = cite.get("url") if isinstance(cite, dict) else None
+            if not url or not is_own(url):
+                continue
+            key = normalize_page_path(url).lower()
+            if not key or key == "(other)":
+                continue
+            counts[key] = counts.get(key, 0) + 1
+    crawled = {
+        r["page"]
+        for r in conn.execute(
+            "SELECT DISTINCT page FROM bot_daily WHERE bot_type = 'search' AND day >= ?",
+            (since_day,),
+        ).fetchall()
+    }
+    missing = [
+        {"page": page, "citations": hits}
+        for page, hits in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        if page not in crawled
+    ]
+    return missing[:10], len(missing)
+
+
 def bot_report(conn: sqlite3.Connection, since: str | None = None, *, limit: int = 20) -> dict:
     """The AI-bot report read from the bot x page x day counters, which hold
     every request even past the month's cap: per type (training crawlers,
     search crawlers, user fetches — hits, pages read, when last seen, bots
     seen), per bot, and the most read pages with each type's last read.
 
-    The reference's `uncrawled` alert (cited pages no search bot read in 30
-    days) needs the citation-tracking surfaces (Phase 6); until then
-    `uncrawled` is null. The alert itself is 'waiting' until the first day of
-    data is 30 days old, 'stale' when no live connection has reported within
-    2 days or search reads fold onto '(other)' rows in the last 30 days (the
-    cap was hit and the pages are no longer known), then 'on'.
-    """
+    The reference's `uncrawled` alert rides at the end: with the alert 'on',
+    cited pages no search bot has read in the last 30 days rank by citations,
+    capped at 10 with the full count beside them. The alert itself is
+    'waiting' until the first day of data is 30 days old, 'stale' when no
+    live connection has reported within 2 days or search reads fold onto
+    '(other)' rows in the last 30 days (the cap was hit and the pages are no
+    longer known), then 'on'; only then does anything uncrawled read."""
     today = dt.date.today()
     since_day = since or (today - dt.timedelta(days=89)).isoformat()
     g = conn.execute(
@@ -803,6 +843,14 @@ def bot_report(conn: sqlite3.Connection, since: str | None = None, *, limit: int
         for val in sorted(by_bot.values(), key=lambda v: v["bot"])
     ]
     pages_out = sorted(pages.values(), key=lambda p: -p["hits"])[:limit]
+    if alert == "on":
+        uncrawled, uncrawled_count = _cited_not_crawled(
+            conn, (today - dt.timedelta(days=29)).isoformat()
+        )
+    else:
+        # waiting or stale: the 30-day view is incomplete by definition,
+        # so nothing is claimed to be uncrawled yet
+        uncrawled, uncrawled_count = None, None
     return {
         "first_day": first_day,
         "last_seen": last_seen,
@@ -811,6 +859,6 @@ def bot_report(conn: sqlite3.Connection, since: str | None = None, *, limit: int
         "types": types_out,
         "bots": bots_out,
         "pages": pages_out,
-        "uncrawled": None,
-        "uncrawled_note": "citation tracking pending (phase 6)",
+        "uncrawled": uncrawled,
+        "uncrawled_count": uncrawled_count,
     }

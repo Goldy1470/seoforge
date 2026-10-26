@@ -5,7 +5,7 @@ import json
 import sys
 import time
 
-from . import crawler, db, indexing, integrations, notify, outcomes, paa
+from . import crawler, db, indexing, integrations, notify, outcomes, paa, prompts
 from .config import settings
 
 DEFAULT_JOBS = [
@@ -14,6 +14,7 @@ DEFAULT_JOBS = [
     {"name": "weekly_sitemap_check", "kind": "sitemap", "interval_hours": 24 * 7},
     {"name": "serp_watch", "kind": "watch", "interval_hours": 24},
     {"name": "outcome_validation", "kind": "outcomes", "interval_hours": 24},
+    {"name": "prompt_positions", "kind": "prompts", "interval_hours": 24},
 ]
 
 
@@ -85,6 +86,8 @@ def run_job(job: dict) -> dict:
             result = asyncio.run(paa.build_paa_tree([settings.brand_name], max_depth=2))
         elif kind == "outcomes":
             result = outcomes.sweep()
+        elif kind == "prompts":
+            result = prompts.outcome_sweep()
         else:
             result = {"error": f"unknown job kind {kind}"}
         status = "done"

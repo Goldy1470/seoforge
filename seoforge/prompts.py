@@ -779,6 +779,152 @@ def platform_states(
     return snapshots
 
 
+def _today() -> dt.date:
+    """The measurement clock — the sweep reads this so tests can pin it
+    the way they pin outcomes."""
+    return dt.date.today()
+
+
+def _day(value) -> dt.date | None:
+    """A stored timestamp's day, or None when nothing sane is stored."""
+    try:
+        return dt.date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return None
+
+
+def _read_states(prompt_id: int, window: dict) -> list:
+    """Every tracked platform's snapshot over one window (no_runs answers
+    with nothing to say, like the Positions panel does)."""
+    return platform_states(
+        prompt_id, platforms=PLATFORMS, since=window["from"], until=window["to"]
+    )
+
+
+def outcome_sweep(limit: int = 1000, now: dt.date | None = None) -> dict:
+    """The prompt-positions outcome sweep: every `improve_ai_visibility`
+    opportunity — open ones and settled ones — is re-read daily.
+
+    The baseline is computed lazily from the immutable 7-day window ending
+    the day before the work was raised (recorded answers never change, so
+    the window reads the same on every run — no snapshot to store). While
+    the work is open, and while the 30 tracking days in `tracking days
+    after close` are running, the per-read refresh lives in `validation`
+    with no outcome written. The final read is the 7 days ending on day 30
+    after close; it folds the per-platform verdicts into the one outcome
+    word, records it once, and trails `position_outcome_recorded` beside
+    the work in the event trail.
+
+    Best-effort: one unreadable row must not stop the rest. Rows whose
+    target names no tracked prompt are counted as skipped, never invented
+    against."""
+    from . import outcomes  # lazy: outcomes stays import-cycle free
+
+    day = now or _today()
+    measured = finals = failed = skipped = 0
+    with db._conn() as conn:
+        rows = conn.execute(
+            "SELECT id, target, status, created_at, completed_at FROM opportunities"
+            " WHERE type = 'improve_ai_visibility'"
+            " AND (status != 'done' OR (completed_at IS NOT NULL"
+            "     AND (outcome IS NULL OR outcome = ?)))"
+            " ORDER BY id LIMIT ?",
+            (outcomes.PENDING, int(limit)),
+        ).fetchall()
+        prompt_ids = {
+            r["text"]: r["id"]
+            for r in conn.execute("SELECT id, text FROM prompts")
+        }
+
+    domains = brand()["domains"]
+    for row in rows:
+        try:
+            prompt_id = prompt_ids.get(str(row["target"] or "").strip())
+            created_day = _day(row["created_at"])
+            completed_day = _day(row["completed_at"])
+            if prompt_id is None or created_day is None:
+                skipped += 1
+                continue
+            baseline = _read_states(
+                prompt_id, outcome_window(created_day - dt.timedelta(days=1))
+            )
+
+            if row["status"] != "done":
+                # Open work: report today's positions, never a verdict.
+                current = _read_states(prompt_id, outcome_window(day))
+                payload = _positions_payload(
+                    baseline, current, final=False, measured_at=day
+                )
+                with db._conn() as conn:
+                    conn.execute(
+                        "UPDATE opportunities SET validation=? WHERE id=?",
+                        (json.dumps(payload), row["id"]),
+                    )
+                measured += 1
+                continue
+
+            if completed_day is None:
+                skipped += 1
+                continue
+            ends = completed_day + dt.timedelta(days=OUTCOME_TRACKING_DAYS)
+            if day < ends:
+                # Still tracked: refresh the read, the verdict waits for the end.
+                current = _read_states(prompt_id, outcome_window(day))
+                payload = _positions_payload(
+                    baseline, current, final=False, measured_at=day
+                )
+                with db._conn() as conn:
+                    conn.execute(
+                        "UPDATE opportunities SET validation=? WHERE id=?",
+                        (json.dumps(payload), row["id"]),
+                    )
+                measured += 1
+                continue
+
+            # Final: the 7 days ending on the last tracked day.
+            current = _read_states(prompt_id, outcome_window(ends))
+            comparison = compare_outcome(baseline, current)
+            word = outcomes.outcome_from_verdicts(
+                [p["verdict"] for p in comparison["platforms"]]
+            )
+            payload = _positions_payload(
+                baseline, current, final=True, measured_at=ends, comparison=comparison
+            )
+            with db._conn() as conn:
+                conn.execute(
+                    "UPDATE opportunities SET outcome=?, validation=?, validated_at=?"
+                    " WHERE id=?",
+                    (word, json.dumps(payload), db.now(), row["id"]),
+                )
+                outcomes.record_event(
+                    conn,
+                    row["id"],
+                    "position_outcome_recorded",
+                    {"outcome": word, "measuredAt": ends.isoformat()},
+                )
+            finals += 1
+        except Exception:
+            failed += 1
+    return {"measured": measured, "finals": finals, "skipped": skipped, "failed": failed}
+
+
+def _positions_payload(
+    baseline: list, current: list, *, final: bool, measured_at: dt.date, comparison: dict | None = None
+) -> dict:
+    """The validation JSON one read stores: baseline next to the latest
+    read, with the per-platform verdicts and the one-line summary."""
+    comparison = comparison or compare_outcome(baseline, current)
+    return {
+        "kind": "prompt_positions",
+        "final": final,
+        "measuredAt": measured_at.isoformat(),
+        "baseline": baseline,
+        "current": current,
+        "platforms": comparison["platforms"],
+        "summary": comparison["summary"],
+    }
+
+
 def record_answer(
     prompt_id: int,
     platform: str,
