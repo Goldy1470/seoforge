@@ -213,6 +213,8 @@ def main():
     sp = sub.add_parser("prompt-states")
     sp.add_argument("id", nargs="?", type=int, default=0)
     sub.add_parser("prompt-sweep")
+    sp = sub.add_parser("brave-submit")
+    sp.add_argument("urls", nargs="*", default=[], help="defaults to the configured site origin")
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -676,6 +678,11 @@ def main():
         from . import prompts
 
         _out(prompts.outcome_sweep(), full=True)
+
+    elif cmd == "brave-submit":
+        from . import indexing
+
+        _out(indexing.brave_submit(args.urls or None), full=True)
 
 
 def _render_product(d: dict) -> str:

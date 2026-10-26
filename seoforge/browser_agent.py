@@ -138,6 +138,22 @@ Return: present=yes/no, dofollow guess, visible text excerpt."""
     return {"url": url, "result": res}
 
 
+def brave_submit_url(url: str) -> str:
+    """Fill Brave Search's re-fetch form (search.brave.com/submit-url) with
+    browser-use. Brave's crawler publishes no user-agent token of its own,
+    so this form is the only submission lane — and the page refuses plain
+    HTTP clients, so the browser agent is the honest automation."""
+    require_browser()
+    task = f"""Open https://search.brave.com/submit-url and submit this URL for (re-)fetching: {url}
+Rules:
+ - Find the field labelled URL / Web address and type ONLY this value: {url}
+ - Press Enter or click the submit button exactly once.
+ - If a captcha or proof-of-work check appears, STOP and report it - never guess through.
+ - Report what the page answered on screen (confirmation or error), verbatim when short.
+"""
+    return run(task)
+
+
 def screenshot(url: str, path: str | None = None) -> str:
     from pathlib import Path
 

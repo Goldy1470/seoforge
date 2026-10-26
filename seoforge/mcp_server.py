@@ -398,6 +398,14 @@ def prompt_gap() -> list:
 
 
 @mcp.tool()
+def brave_submit(urls: list | None = None) -> dict:
+    """Submit URLs to Brave Search's re-fetch queue (search.brave.com/submit-url): Brave's crawler deliberately carries no differentiated user agent, so the documented submit form is the only lane and nothing is attributable in bot_report afterwards. browser-use fills the form when installed (HTTP clients are refused by the page); otherwise every answer is the manual steps. Defaults to the site origin."""
+    from . import indexing
+
+    return indexing.brave_submit(urls)
+
+
+@mcp.tool()
 def ai_sources_list() -> dict:
     """AI-assistant source registry: every source we count traffic from (hosts, aliases, surfaces like ChatGPT Shopping), with the Bing /ck/a referrer gate flagged."""
     from . import ai_sources

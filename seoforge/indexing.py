@@ -129,3 +129,54 @@ def ping_sitemap() -> dict:
     except Exception as exc:
         code = f"error: {exc}"[:120]
     return {"sitemap": sm, "google_ping": code}
+
+
+BRAVE_SUBMIT_URL = "https://search.brave.com/submit-url"
+
+# The three operator-documented facts plus the honest reporting boundary.
+# Brave documents that its crawler advertises no user agent of its own, so
+# no Bravebot entry can live in the bot registry: a fabricated token would
+# make every bot-report attribution a fiction.
+BRAVE_GUIDANCE = [
+    "Brave's crawler publishes no user-agent token of its own; it crawls where Googlebot can - a page Google cannot crawl is not Brave-crawled either. Fix Google crawlability first, never fabricate a Bravebot rule.",
+    "robots.txt gates crawling, not indexing: robots.txt is not used to keep a page OUT of Brave's index - the robots noindex directive is the delisting control, re-applied when Brave re-fetches the page (this form does exactly that).",
+    "No Bravebot token will ever appear in the bot report: with no published user agent or IP ranges, an ingest hit cannot honestly be attributed to Brave.",
+]
+
+
+def brave_submit(urls: list[str] | None = None) -> dict:
+    """Submit URLs to Brave Search for (re-)indexing through the one lane
+    Brave documents: the submit-url form, filled by the browser agent when
+    it is installed and answered as manual steps when it is not."""
+    from . import browser_agent
+
+    targets: list[str] = [str(u).strip() for u in (urls or []) if str(u).strip()]
+    if not targets:
+        targets = [str(settings.site_url).strip()]
+
+    results = []
+    for url in targets:
+        if not re.match(r"^https?://[^\s]+$", url):
+            results.append({"url": url, "status": "invalid", "error": "not an http(s) URL"})
+        elif not browser_agent.available():
+            results.append(
+                {
+                    "url": url,
+                    "status": "manual",
+                    "steps": f"open {BRAVE_SUBMIT_URL}, paste this URL, submit once",
+                }
+            )
+        else:
+            try:
+                output = browser_agent.brave_submit_url(url)
+                results.append({"url": url, "status": "submitted", "output": str(output)[:300]})
+            except Exception as exc:
+                results.append({"url": url, "status": "failed", "error": str(exc)[:200]})
+
+    return {
+        "platform": "brave",
+        "submit_form": BRAVE_SUBMIT_URL,
+        "urls": targets,
+        "results": results,
+        "guidance": list(BRAVE_GUIDANCE),
+    }

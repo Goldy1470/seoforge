@@ -517,7 +517,7 @@ Task 2.2:
   daily `prompt_positions` scheduler job (`tests/test_prompt_wiring.py`;
   one Phase-4 bot-report test contract updated: `uncrawled` answers
   `[]` + an explicit `uncrawled_count` when the alert is on).
-- Task 6.3 (this commit) — the surfaces + docs:
+- Task 6.3 (`1d204fc`) — the surfaces + docs:
   `prompts-add` / `prompts-list` / `answer-record` (space- or
   comma-separated citation URLs, `--sentiment`, `--at`) /
   `prompt-states` (one prompt or all) / `prompt-sweep` CLI commands;
@@ -525,8 +525,25 @@ Task 2.2:
   `prompt_gap` MCP tools (91 → 95); README roadmap + feature-table
   rows; THIRD_PARTY_NOTICES derivation rows; this section
   (`tests/test_prompt_surfaces.py`, 4 tests).
+- Task 6.4 (this commit) — the Brave submit lane: no `data/ai_bots.json`
+  entry (decision below); `browser_agent.brave_submit_url` fills
+  Brave's documented re-fetch form (`search.brave.com/submit-url`) with
+  browser-use and always reports what the page answered;
+  `indexing.brave_submit` is the graceful handoff — manual steps when
+  the browser agent is not installed, `invalid` for non-URLs, an honest
+  `failed` status when the page refuses — carrying the three
+  operator-documented facts as guidance; `brave-submit` CLI +
+  `brave_submit` MCP tool (95 → 96); `tests/test_brave_submit.py`
+  (+4, fixture-faked agent, no page ever opened).
 
 ### Decisions & deviations (code over plan)
+- No Bravebot entry in `data/ai_bots.json`: Brave's own crawler page
+  documents that the crawler "does not advertise a differentiated user
+  agent", and ingest verification compiles registry user-agent tokens —
+  a fabricated token would make every bot-report attribution a
+  fiction. The registry stays verification-only; the submit lane
+  carries the documented facts instead (Googlebot-crawlability gate,
+  robots.txt vs noindex split, nothing attributable in the report).
 - Live AI-answer fetching is deliberately deferred: an answer enters
   as a manual paste-in (`source='manual'`) and is parsed by exactly
   the rules a fetched answer would get. No surface pretends to ask
@@ -568,13 +585,18 @@ Task 2.2:
   Task 6.3 (+4 `tests/test_prompt_surfaces.py`: CLI round trips for
   the five commands, MCP round trips including every invalid path, the
   seven-platform `no_runs` state grid, the gap raising only weak
-  states). GSC and AI-answer fetching are faked or stubbed everywhere;
-  the suite never touches `data/seoforge.db`.
+  states); 387 after Task 6.4 (+4 `tests/test_brave_submit.py`: the
+  no-browser handoff with the manual steps, the invalid-URL answer,
+  the agent-filled origin default, the honest failure path, and CLI/MCP
+  round trips). GSC, AI-answer fetching and the browser agent are
+  faked or stubbed everywhere; the suite never touches
+  `data/seoforge.db` and never opens the submit page.
 - Phase checks: `python -m pytest -q` green before every commit;
-  README/notices/port-notes rows in the task 6.3 commit;
+  README/port-notes rows in the task 6.4 commit (the Brave lane is
+  SEOForge-original — no third-party derivation, no notices row);
   `python -m seoforge.cli --help` lists `prompts-add` / `prompts-list`
-  / `answer-record` / `prompt-states` / `prompt-sweep`; 95
-  `@mcp.tool` decorators.
+  / `answer-record` / `prompt-states` / `prompt-sweep` /
+  `brave-submit`; 96 `@mcp.tool` decorators.
 - Clock pinning: prompt tests monkeypatch `prompts._today` (the sweep
   additionally accepts `now=`, the scheduler calls it bare with its
   defaults); the scheduler's bot-report keeps the real clock and its
