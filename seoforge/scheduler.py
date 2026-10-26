@@ -15,6 +15,10 @@ DEFAULT_JOBS = [
     {"name": "serp_watch", "kind": "watch", "interval_hours": 24},
     {"name": "outcome_validation", "kind": "outcomes", "interval_hours": 24},
     {"name": "prompt_positions", "kind": "prompts", "interval_hours": 24},
+    # the position tracker's three lanes (the reference cron's schedule)
+    {"name": "serp_positions_daily", "kind": "serp_refresh", "interval_hours": 24},
+    {"name": "serp_retries_hourly", "kind": "serp_retries", "interval_hours": 1},
+    {"name": "serp_digest_daily", "kind": "serp_digest", "interval_hours": 24},
 ]
 
 
@@ -88,6 +92,18 @@ def run_job(job: dict) -> dict:
             result = outcomes.sweep()
         elif kind == "prompts":
             result = prompts.outcome_sweep()
+        elif kind == "serp_refresh":
+            from . import serp_scraper
+
+            result = serp_scraper.refresh_domain(None)
+        elif kind == "serp_retries":
+            from . import serp_scraper
+
+            result = serp_scraper.retry_pending()
+        elif kind == "serp_digest":
+            from . import serp_digest
+
+            result = serp_digest.digest_all()
         else:
             result = {"error": f"unknown job kind {kind}"}
         status = "done"

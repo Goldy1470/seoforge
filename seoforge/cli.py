@@ -231,6 +231,30 @@ def main():
     sp.add_argument("id")
     sp = sub.add_parser("key-revoke")
     sp.add_argument("key_id")
+    sp = sub.add_parser("serp-domains")
+    sp = sub.add_parser("serp-add")
+    sp.add_argument("domain")
+    sp.add_argument("keywords", nargs="+")
+    sp.add_argument("--device", default="desktop")
+    sp.add_argument("--country", default="US")
+    sp.add_argument("--city", default="")
+    sp.add_argument("--tags", default="")
+    sp.add_argument("--volume", type=int, default=0)
+    sp = sub.add_parser("serp-keywords")
+    sp.add_argument("--domain", default="")
+    sp.add_argument("--device", default="")
+    sp.add_argument("--country", default="")
+    sp.add_argument("--keyword", default="")
+    sp = sub.add_parser("serp-refresh")
+    sp.add_argument("--domain", default="")
+    sp = sub.add_parser("serp-retries")
+    sp.add_argument("--limit", type=int, default=100)
+    sp = sub.add_parser("serp-insights")
+    sp.add_argument("--domain", default="")
+    sp = sub.add_parser("serp-digest")
+    sp.add_argument("--domain", default="")
+    sp = sub.add_parser("serp-csv")
+    sp.add_argument("domain")
     sp = sub.add_parser("brave-submit")
     sp.add_argument("urls", nargs="*", default=[], help="defaults to the configured site origin")
     args = ap.parse_args()
@@ -733,6 +757,51 @@ def main():
         from . import indexing
 
         _out(indexing.brave_submit(args.urls or None), full=True)
+
+    elif cmd in ("serp-domains", "serp-add", "serp-keywords", "serp-refresh", "serp-retries", "serp-insights", "serp-digest", "serp-csv"):
+        from . import serp_digest, serp_scraper, serp_tracking
+
+        try:
+            if cmd == "serp-domains":
+                _out(serp_tracking.list_domains(), full=True)
+            elif cmd == "serp-add":
+                made = [
+                    serp_tracking.add_keyword(
+                        keyword,
+                        args.domain,
+                        device=args.device,
+                        country=args.country,
+                        city=args.city,
+                        volume=args.volume,
+                        tags=args.tags,
+                    )
+                    for keyword in args.keywords
+                ]
+                _out({"added": len(made), "keywords": made}, full=True)
+            elif cmd == "serp-keywords":
+                _out(
+                    serp_tracking.list_keywords(
+                        args.domain or None,
+                        device=args.device or None,
+                        country=args.country or None,
+                        keyword=args.keyword or None,
+                    ),
+                    full=True,
+                )
+            elif cmd == "serp-refresh":
+                if not (args.domain or "").strip():
+                    raise ValueError("a --domain is required (the tracker refreshes one domain per pass)")
+                _out(serp_scraper.refresh_domain(args.domain), full=True)
+            elif cmd == "serp-retries":
+                _out(serp_tracking.pending_retries(args.limit), full=True)
+            elif cmd == "serp-insights":
+                _out(serp_scraper.insights(args.domain or None), full=True)
+            elif cmd == "serp-digest":
+                _out(serp_digest.digest_all(domain=args.domain or ""), full=True)
+            elif cmd == "serp-csv":
+                _out(serp_scraper.keywords_csv(args.domain), full=True)
+        except ValueError as e:
+            _out({"error": "invalid", "message": str(e)}, full=True)
 
 
 def _render_product(d: dict) -> str:

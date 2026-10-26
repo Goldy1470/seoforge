@@ -685,3 +685,125 @@ Task 2.2:
   seat, (2) the served Bearer flow end-to-end on that seat's URL,
   (3) the per-tenant file lifecycle on the host's disk. All three run
   the moment the origin launches.
+
+## Phase 8 (position tracker — the full engine) — COMPLETE
+
+### Tasks
+- Task 8.1 (`7f0fde1`) — stores + kernel: migration 7 adds
+  `serp_domains` (per-domain device, country, city, scrape strategy,
+  notification flag + `notification_emails`), `serp_keywords`
+  (position, `last_updated`, error JSON, daily history keyed unpadded
+  `YYYY-M-D`) and `serp_retry_queue`;
+  `seoforge/serp_tracking.py` (domain add/list, keyword add/list/edit,
+  day-row upsert, `position_change` and best/distribution reads).
+  `tests/test_serp_tracking.py` (15). Suite 413 -> 428.
+- Task 8.2 (`45a6fd7`) — the provider plane:
+  `seoforge/serp_providers.py` (11 provider records — scrapingant,
+  scrapingrobot, serpapi, serply, spaceSerp, proxy, searchapi,
+  valueserp, serper, hasdata, crazyserp — URL/header contracts
+  verbatim per provider, JSON extractors keeping the reference
+  response keys, the Google-HTML and proxy-HTML readers over stdlib
+  `html.parser`, and the JS codec pair mirrored as `_encode_uri` /
+  `_encode_component`); `seoforge/serp_countries.py` (251 codes).
+  `tests/test_serp_providers.py` (24). Suite 452.
+- Task 8.3 (`cc5d169`) — the scrape engine:
+  `seoforge/serp_scraper.py`: settings + ready gate, `get_serp`
+  deep-path/subdomain/`*` matching (raw item URLs, never normalized),
+  `build_full_results`' 100-slot skipped array, `resolveStrategy`
+  basic/custom/smart page plans, per-page renumbering
+  (`offset + index + 1`, provider positions replaced), the smart
+  fallback to full-HTML reading and the half-failure
+  "pages failed - scraper too unreliable to determine position"
+  answer, "Scraper failed on all {n} pages for {kw}",
+  `refresh_domain` (parallel for scrapingant/serpapi/searchapi),
+  `retry_pending`, insights, and the keywords CSV (header
+  `ID,Keyword,Position,URL,Country,City,Device,Updated,Added,Tags`).
+  `SEOFORGE_SERP_TRACKER_*` knobs. `tests/test_serp_scraper.py` (18).
+  Suite 470.
+- Task 8.4 (`24361dc`) — the digest lane and the surfaces:
+  `seoforge/serp_digest.py` (subject `[domain] Keyword Positions
+  Update`, per-domain `notification_emails` override -> global
+  fallback, stat line "N Improved, M Declined" doubling as preheader,
+  time-since operator bands verbatim, regional-indicator flags,
+  text/emoji device labels, stdlib smtplib with the 465/STARTTLS
+  split, the upfront "SMTP has not been set up yet" gate, per-domain
+  send failure isolated), `SEOFORGE_SMTP_*` knobs, eight `serp-*`
+  CLI commands, nine `serp_*` MCP tools (standing count 96 -> 105)
+  and three scheduler lanes (`serp_positions_daily` /
+  `serp_retries_hourly` / `serp_digest_daily`).
+  `tests/test_serp_digest.py` (12) + `tests/test_serp_surfaces.py`
+  (8). Suite 490.
+- Task 8.5 (this commit) — README (feature row, env bullets,
+  roadmap v0.13), the Serpbear section in THIRD_PARTY_NOTICES, and
+  this record.
+
+### Decisions & deviations (code over plan)
+- History semantics ported verbatim from `utils/refresh.ts`: keys are
+  unpadded `YYYY-M-D` through a monkeypatchable `_today()` seam;
+  success stamps `last_updated`, clears the error field and dequeues
+  the retry queue; failure keeps the previous stamp, records
+  `{date, error, scraper}` JSON so the retry screen knows which
+  scraper to re-aim, carries the previous position, and still writes
+  the day row (zero = checked, not found — one code path, no invented
+  positions).
+- Retry queue: the reference's `failed_queue.json` became the SQL
+  table `serp_retry_queue` — one transactional authority instead of
+  a side file the engine could drop or double-read; the semantics
+  (enqueue on failure, dequeue on success, hourly drain lane that
+  honours the setup gate) are the reference's.
+- Scheduler lanes mirror the reference cron cadence: daily scrape,
+  hourly retry, daily digest.
+- Settings: the reference's encrypted `settings.json` is replaced by
+  `SEOFORGE_SERP_TRACKER_*` env knobs, and its provider key carries
+  the `scaping_api` typo in the reference — normalized to
+  `scraping_api` here. Provider defaults to `never`: nothing scrapes
+  without being explicitly turned on.
+- `position_change` parity: sorted history, previous = second-newest
+  day; `previous == 0` counts the re-entry as a gain of that rank;
+  a current 0 with a real previous reports `previous - 100` (dropped
+  out of the results); otherwise `previous - position`.
+- Reference oddities kept verbatim and pinned by tests: camelCase
+  provider id `spaceSerp`; crazyserp's `page={num}&pageOffset=0`;
+  serply's `realPosition` key and proxy-country header downgrade list
+  (the country stays in the URL, only headers downgrade); serper's
+  `organic` key; hasdata's `organicResults`; the
+  scrapingant/scrapingrobot whole-raw-tail single `encodeURI`
+  (separators stay raw), mirrored as `_encode_uri` versus
+  `_encode_component` after re-testing both JS codecs' exact output.
+- CSV: the reference exports from a browser client call
+  (`utils/client/exportcsv.ts`); SEOForge ships the engine artifact —
+  csv-module escaping, tags joined with commas raw and the whole set
+  quoted in-field, reference header kept verbatim.
+- `utils/insight.ts` is Search Console rollups in the reference; the
+  engine's insights are rank rollups computed from keyword history
+  (avg, best, top3/top10/top20/top50/beyond/lost).
+- HTML result titles are flattened to plain text: the engine keeps
+  positions and URLs; titles/styled text were UI concerns.
+- Reference `keyword.domain` default `'{}'` -> `''`; nothing is
+  tracked without an explicit domain.
+- Not ported (UI/infrastructure layer, per the porting rules):
+  `utils/parseKeywords.ts` and the react-query client hooks; the
+  Adwords volume lane (`utils/adwords.ts` + `pages/api/adwords.ts`);
+  the `email/email.html` asset chain and CDN images (the digest
+  template is inlined); no Telegram lane exists in the reference, so
+  none here.
+- MCP keeps its agent-surface role (9 `serp_*` tools), CLI is the
+  operator mirror in JSON, and the digest stays a scheduled lane —
+  same shape the reference gave these responsibilities.
+
+### Toolchain
+- Suite as observed: 413 -> 428 (+15 `tests/test_serp_tracking.py`)
+  -> 452 (+24 `tests/test_serp_providers.py`) -> 470 (+18
+  `tests/test_serp_scraper.py`) -> 490 (+12
+  `tests/test_serp_digest.py`, +8 `tests/test_serp_surfaces.py`).
+  Every provider round trip runs through injectable fakes; SMTP
+  through injectable senders; the suite never touches
+  `data/seoforge.db`, `data/directory.db`, or the network.
+- CLI smoke offline: `serp-domains`, `serp-insights`, `serp-refresh
+  --domain x.com` ("Scraper has not been set up yet"), `serp-digest`
+  all answer without setup.
+- Migration pins updated in `tests/test_migrations.py` with the store.
+- Customer-zero standing: the three Phase-7 hosted-origin
+  verifications remain pending; Phase 8 adds no served route (CLI,
+  MCP and scheduler surfaces only), so nothing new queues on the
+  origin.

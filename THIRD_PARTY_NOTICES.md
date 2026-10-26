@@ -66,3 +66,51 @@ SOFTWARE.
 - No Ansvisor branding, product URLs or self-referential how-to text in rewritten strings.
 - Logic re-implemented in Python; JS not copied line-by-line.
 - Reference tree is never modified; only read.
+
+## Serpbear derivations
+
+SEOForge re-implements logic, API contracts, data vocabulary and file shapes from
+the open-source project **Serpbear** (https://github.com/towfiqi/serpbear),
+pinned at reference commit `a1328fb4142dde40e0011c646339c4d4dbabdaca` (the v3.1.0 tree).
+
+Serpbear is distributed under the MIT License, copyright (c) 2022 Amruth Pillai
+(as found in the pinned tree's LICENSE file):
+
+```
+MIT License
+
+Copyright (c) 2022 Amruth Pillai
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+| SEOForge file | Derives from Serpbear | Notes |
+|---|---|---|
+| `seoforge/serp_tracking.py` | `utils/refresh.ts` + the keyword model in `database/models/` | the history kernel re-implemented for SQLite: unpadded `YYYY-M-D` day keys written through a monkeypatchable `_today()` seam; a successful refresh stamps `last_updated`, clears the error field and dequeues the retry queue; a failed refresh keeps the previous stamp, logs `{date, error, scraper}` JSON while carrying the previous position, and still writes the zero day row (checked, not found); `position_change` reads the previous point from the sorted history with the previous=0 "re-entry counts as a gain" case. Deviations: the retry queue is the SQL table `serp_retry_queue` (reference: a JSON file) and the keyword domain default is `''` (always explicit here). |
+| `seoforge/serp_providers.py` | `scrapers/index.ts` + `scrapers/services/*.ts` (11 service files re-entered as one `Provider` record each) | URL/header contracts verbatim, including `spaceSerp`'s camelCase id, crazyserp's `page={num}&pageOffset=0` tail, serply's `realPosition` key and proxy-country header downgrade list (the country stays in the URL), serper's `organic` payload key, hasdata's `organicResults` key, and the scrapingant/scrapingrobot whole-raw-tail single `encodeURI` mirrored as UTF-8-aware `_encode_uri` / `_encode_component` builders; the Google-HTML and proxy-HTML readers re-implement the reference DOM walk over stdlib `html.parser`; the input JSON extractors keep the reference response keys. |
+| `seoforge/serp_countries.py` | `utils/countries.ts` | the 251-entry alpha-2 country codebook re-entered. |
+| `seoforge/serp_scraper.py` | `utils/scraper.ts` + `utils/refresh.ts` + `utils/insight.ts` | the scrape engine re-implemented: the scraper settings ledger (provider, key, retry, delay, strategy, pages, smart fallback), `get_serp` deep-path/subdomain/`*` domain matching on raw item URLs, `build_full_results`' 100-slot skipped array, `resolveStrategy`'s basic/custom/smart page plans, per-page position renumbering (`offset + index + 1`, provider positions replaced), the smart fallback to full-HTML reading and the half-failure "scraper too unreliable" answer, parallel per-domain refresh for scrapingant/serpapi/searchapi, the retry drain, rank insights rebuilt from keyword history (the reference's `insight.ts` is Search Console rollups), and the keywords CSV (reference header kept; the browser-side client became an engine artifact with csv-module escaping, tags joined raw and quoted in-field; HTML titles flattened to text). |
+| `seoforge/serp_digest.py` | `utils/generateEmail.ts` + `pages/api/notify.ts` | the email digest re-implemented through stdlib smtplib (port 465 -> SMTP_SSL, else SMTP + optional STARTTLS + optional login): per-domain recipient override over the global address, the `[domain] Keyword Positions Update` subject, the "N Improved, M Declined" stat line (spacing normalized) doubling as the preheader, the time-since operator bands verbatim, regional-indicator flag code points and text device labels, the upfront "SMTP has not been set up yet" gate, and per-domain send failures that never block the others. The email template is inlined - the reference assembles `email/email.html` assets and CDN-hosted images, neither ported. |
+| `seoforge/cli.py` / `seoforge/mcp_server.py` / `seoforge/scheduler.py` / `seoforge/config.py` (the serp surface) | `cron.js` + `pages/api/cron.ts` (+ the domain/keyword REST endpoints as surface precedents) | the scheduled lanes re-implemented as `serp_refresh` (daily), `serp_retries` (hourly, answering through the same not-set-up gate as the reference cron) and `serp_digest` (daily); eight `serp-*` CLI commands and nine `serp_*` MCP tools wrap the engine; the reference's encrypted `settings.json` (whose provider key carries the `scaping_api` typo) is replaced by `SEOFORGE_SERP_TRACKER_*` / `SEOFORGE_SMTP_*` environment knobs with the key normalized to `scraping_api`. |
+| `tests/test_serp_tracking.py` + `tests/test_serp_providers.py` + `tests/test_serp_scraper.py` + `tests/test_serp_digest.py` + `tests/test_serp_surfaces.py` | behaviour matrix of the reference engine cases | offline harnesses: every provider round trip runs through injectable fakes (no HTTP, no operator accounts), fixed clocks on the history reads, boundary cases at the renumber/position-change edges, the codec pair re-tested byte-level, and CLI/MCP/scheduler round trips; the email body is asserted as plain HTML fragments. |
+
+- No Serpbear branding or product URLs in rewritten strings.
+- Logic re-implemented in Python; TypeScript not copied line-by-line.
+- Reference tree is never modified; only read.
+- Third-party SERP providers appear only as contracts; no provider is called from the suite.

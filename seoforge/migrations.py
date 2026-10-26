@@ -365,6 +365,62 @@ CREATE INDEX IF NOT EXISTS prompt_results_prompt_idx
     )
 
 
+def _v7_serp_tracking(conn: sqlite3.Connection) -> None:
+    """Position tracking: domains, their tracked keywords (device/country/
+    city dimensions) and the failed-scrape retry queue. Keyword state is
+    one row: current position plus the full daily history and last scraped
+    result packed as JSON, exactly as the reference stores them."""
+    conn.executescript(
+        """
+CREATE TABLE IF NOT EXISTS serp_domains (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  domain TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  keyword_count INTEGER NOT NULL DEFAULT 0,
+  last_updated TEXT,
+  added TEXT,
+  tags TEXT NOT NULL DEFAULT '[]',
+  notification INTEGER NOT NULL DEFAULT 1,
+  notification_interval TEXT NOT NULL DEFAULT 'daily',
+  notification_emails TEXT NOT NULL DEFAULT '',
+  scrape_strategy TEXT NOT NULL DEFAULT '',
+  scrape_pagination_limit INTEGER NOT NULL DEFAULT 0,
+  scrape_smart_full_fallback INTEGER NOT NULL DEFAULT 0,
+  subdomain_matching TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS serp_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT NOT NULL,
+  device TEXT NOT NULL DEFAULT 'desktop',
+  country TEXT NOT NULL DEFAULT 'US',
+  city TEXT NOT NULL DEFAULT '',
+  latlong TEXT NOT NULL DEFAULT '',
+  domain TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0,
+  url TEXT NOT NULL DEFAULT '',
+  volume INTEGER NOT NULL DEFAULT 0,
+  history TEXT NOT NULL DEFAULT '{}',
+  last_result TEXT NOT NULL DEFAULT '[]',
+  tags TEXT NOT NULL DEFAULT '[]',
+  sticky INTEGER NOT NULL DEFAULT 0,
+  updating INTEGER NOT NULL DEFAULT 0,
+  last_updated TEXT,
+  added TEXT,
+  last_update_error TEXT NOT NULL DEFAULT 'false',
+  settings TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS serp_keywords_domain_idx ON serp_keywords (domain);
+
+CREATE TABLE IF NOT EXISTS serp_retry_queue (
+  keyword_id INTEGER PRIMARY KEY REFERENCES serp_keywords(id),
+  error TEXT NOT NULL DEFAULT '',
+  queued_at TEXT NOT NULL
+);
+"""
+    )
+
+
 MIGRATIONS: list = [
     (1, "initial schema (pages + crawl engine tables)", _v1_initial_schema),
     (2, "ai_bot_ranges cache for AI-operator published IP ranges", _v2_ai_bot_ranges),
@@ -372,6 +428,7 @@ MIGRATIONS: list = [
     (4, "bot ingest: connections, events, daily counters, usage caps, file claims", _v4_bot_tables),
     (5, "opportunity outcome capture: completion stamp, verdict, validation, event trail", _v5_outcome_measurements),
     (6, "prompts + prompt_results: tracked prompts, pasted-in AI answers with parsed citation metrics", _v6_prompts),
+    (7, "serp tracking: domains, tracked keywords with device/country/city, retry queue", _v7_serp_tracking),
 ]
 
 
