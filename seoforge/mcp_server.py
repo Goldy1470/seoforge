@@ -341,6 +341,63 @@ def outcome_validate(opportunity_id: int) -> dict:
 
 
 @mcp.tool()
+def prompt_create(text: str, category: str = "") -> dict:
+    """Track one buying question verbatim for prompt-positions tracking: pasted AI answers are parsed against it (mentions, mention position, own-domain citations, visibility). Idempotent - the same text never creates a second row; an empty text answers {"error": "invalid"}."""
+    from . import prompts
+
+    try:
+        return {"id": prompts.create_prompt(text, category)}
+    except ValueError as e:
+        return {"error": "invalid", "message": str(e)}
+
+
+@mcp.tool()
+def prompt_record_answer(
+    prompt_id: int,
+    platform: str,
+    response: str,
+    citations: list | None = None,
+    sentiment: str = "neutral",
+    competitors: list | None = None,
+    at: str = "",
+) -> dict:
+    """Record one manually pasted AI answer for a prompt (live answer fetching stays deferred - the paste-in is the substrate): parsed deterministically at write time (mention count, first-mention position, own-domain citation count, visibility score, sentiment, competitor mentions) and stored append-only - a recorded answer never changes. citations are {"url": ...} dicts (bare strings are read as urls); an unknown prompt id or platform answers {"error": "invalid"}."""
+    from . import prompts
+
+    cites = [c if isinstance(c, dict) else {"url": str(c)} for c in (citations or [])]
+    try:
+        return prompts.record_answer(
+            prompt_id,
+            platform,
+            response,
+            citations=cites,
+            sentiment=sentiment,
+            competitors=competitors or [],
+            at=at or None,
+        )
+    except ValueError as e:
+        return {"error": "invalid", "message": str(e)}
+
+
+@mcp.tool()
+def prompt_states(prompt_id: int, since: str = "", until: str = "") -> list:
+    """One prompt's state per tracked platform over the last 7 tracked days (or since/until day strings): state, run count and how they were judged - the same rows and rules the Positions panel reads; every tracked platform answers, `no_runs` while nothing was pasted on it."""
+    from . import prompts
+
+    return prompts.platform_states(
+        prompt_id, since=since or None, until=until or None
+    )
+
+
+@mcp.tool()
+def prompt_gap() -> list:
+    """One improve_ai_visibility work item per tracked prompt whose 7-day state is weak (not_mentioned, mentioned_late or not_cited) - the fix is prompt-shaped work the prompt-positions sweep then measures; `no_runs` platforms raise nothing (there is only pasting to catch up on)."""
+    from . import integrations
+
+    return integrations._ai_visibility_gap()
+
+
+@mcp.tool()
 def ai_sources_list() -> dict:
     """AI-assistant source registry: every source we count traffic from (hosts, aliases, surfaces like ChatGPT Shopping), with the Bing /ck/a referrer gate flagged."""
     from . import ai_sources

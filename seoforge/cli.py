@@ -194,6 +194,25 @@ def main():
     sp.add_argument("--limit", type=int, default=25)
     sp = sub.add_parser("outcomes-validate")
     sp.add_argument("id", nargs="?", type=int, default=0)
+    sp = sub.add_parser("prompts-add")
+    sp.add_argument("text")
+    sp.add_argument("--category", default="")
+    sub.add_parser("prompts-list")
+    sp = sub.add_parser("answer-record")
+    sp.add_argument("prompt_id", type=int)
+    sp.add_argument("platform")
+    sp.add_argument("response")
+    sp.add_argument(
+        "--citations",
+        nargs="*",
+        default=[],
+        help="source URLs the answer cited - space-separated; commas inside one value split",
+    )
+    sp.add_argument("--sentiment", default="neutral")
+    sp.add_argument("--at", default=None, help="ISO stamp; defaults to now")
+    sp = sub.add_parser("prompt-states")
+    sp.add_argument("id", nargs="?", type=int, default=0)
+    sub.add_parser("prompt-sweep")
     args = ap.parse_args()
 
     cmd = args.cmd
@@ -604,6 +623,59 @@ def main():
             )
         else:
             _out(outcomes.sweep(), full=True)
+
+    elif cmd == "prompts-add":
+        from . import prompts
+
+        _out({"id": prompts.create_prompt(args.text, args.category)}, full=True)
+
+    elif cmd == "prompts-list":
+        from . import prompts
+
+        _out(prompts.list_prompts(), full=True)
+
+    elif cmd == "answer-record":
+        from . import prompts
+
+        cites = [
+            {"url": url}
+            for raw in args.citations
+            for url in (part.strip() for part in str(raw).split(","))
+            if url
+        ]
+        try:
+            _out(
+                prompts.record_answer(
+                    args.prompt_id,
+                    args.platform,
+                    args.response,
+                    citations=cites,
+                    sentiment=args.sentiment,
+                    at=args.at or None,
+                ),
+                full=True,
+            )
+        except ValueError as e:
+            _out({"error": "invalid", "message": str(e)}, full=True)
+
+    elif cmd == "prompt-states":
+        from . import prompts
+
+        if args.id:
+            _out(prompts.platform_states(args.id), full=True)
+        else:
+            _out(
+                [
+                    {"id": p["id"], "text": p["text"], "platforms": prompts.platform_states(p["id"])}
+                    for p in prompts.list_prompts()
+                ],
+                full=True,
+            )
+
+    elif cmd == "prompt-sweep":
+        from . import prompts
+
+        _out(prompts.outcome_sweep(), full=True)
 
 
 def _render_product(d: dict) -> str:
