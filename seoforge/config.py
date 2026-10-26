@@ -70,6 +70,17 @@ class Settings:
     serp_method: str = os.getenv("SEOFORGE_SERP_METHOD", "auto")
     serpdev_api_key: str = os.getenv("SERPDEV_API_KEY", "")
 
+    # Position tracking (the rank engine's provider lane)
+    serp_tracker_provider: str = os.getenv("SEOFORGE_SERP_TRACKER_PROVIDER", "never")
+    serp_tracker_api_key: str = os.getenv("SEOFORGE_SERP_TRACKER_API_KEY", "")
+    serp_tracker_retry: bool = _bool(os.getenv("SEOFORGE_SERP_TRACKER_RETRY"), True)
+    serp_tracker_delay: int = int(os.getenv("SEOFORGE_SERP_TRACKER_DELAY", "0") or 0)
+    serp_tracker_strategy: str = os.getenv("SEOFORGE_SERP_TRACKER_STRATEGY", "basic")
+    serp_tracker_pages: int = int(os.getenv("SEOFORGE_SERP_TRACKER_PAGES", "5") or 5)
+    serp_tracker_smart_fallback: bool = _bool(
+        os.getenv("SEOFORGE_SERP_TRACKER_SMART_FALLBACK"), False
+    )
+
     openseo_url: str = os.getenv("OPENSEO_URL", "")
     openseo_api_key: str = os.getenv("OPENSEO_API_KEY", "")
     openseo_mcp_url: str = os.getenv("OPENSEO_MCP_URL", "https://app.openseo.so/mcp")
