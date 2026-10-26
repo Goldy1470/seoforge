@@ -40,6 +40,9 @@ class Settings:
     brand_name: str = os.getenv("SEOFORGE_BRAND_NAME", "Brand")
     brand_tagline: str = os.getenv("SEOFORGE_BRAND_TAGLINE", "")
     db_path: str = os.getenv("SEOFORGE_DB", str(ROOT / "data" / "seoforge.db"))
+    directory_db: str = os.getenv(
+        "SEOFORGE_DIRECTORY_DB", str(ROOT / "data" / "directory.db")
+    )
     exports_dir: str = os.getenv("SEOFORGE_EXPORTS", str(ROOT / "exports"))
     directories_csv: str = os.getenv(
         "SEOFORGE_DIRECTORIES_CSV", str(ROOT / "data" / "directories_73.csv")

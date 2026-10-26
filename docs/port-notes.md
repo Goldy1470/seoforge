@@ -601,3 +601,87 @@ Task 2.2:
   additionally accepts `now=`, the scheduler calls it bare with its
   defaults); the scheduler's bot-report keeps the real clock and its
   tests seed stamps from `dt.date.today()`, as Phase 4 does.
+
+## Phase 7 (tenant shell — the billing gate) — COMPLETE
+
+### Tasks
+- Task 7.1 (`7d2bb11`) — the directory: `seoforge/store.py` (one
+  cross-dialect store — SQLite offline/default, `postgresql://`
+  production with a lazy psycopg/psycopg2 import; identical DDL over
+  TEXT uuid primary keys, ISO stamps, TEXT counters; `?` placeholders
+  translated to `%s`; an honest RuntimeError when a postgresql:// URL
+  opens with no driver installed) and `seoforge/tenants.py` (tenants,
+  the `owner` seat, `sfk_` keys shown once with only SHA-256 stored,
+  the plan gate, UPDATE-then-INSERT metering, per-plan quotas),
+  `tests/test_tenants.py` (13).
+- Task 7.2 (`c6a3d61`) — engine tenancy + CLI: `seoforge/tenancy.py`
+  (ambient contextvar, `scoped()`, hostile-id flattening that cannot
+  walk the tree, per-tenant engine files beside the operator's path)
+  threaded through the single `db._conn()` choke point; `tenant-add` /
+  `tenants` / `tenant-status` / `tenant-plan` / `key-issue` / `keys` /
+  `key-revoke` CLI (ValueError → `{"error": "invalid"}` mirror),
+  `tests/test_tenancy.py` (6).
+- Task 7.3 (`4172be7`) — the served data plane: `/api/v1/*` guard
+  middleware (401 unknown key, 402 plan gate, 429 spent quota, tenant
+  handed via `request.state`), `GET /api/v1/whoami` (identity, plan,
+  limits, month-to-date usage, remaining), `POST /api/v1/run/{kind}`
+  (allow-listed, runs inside `tenancy.scoped(tenant)`, meters success
+  only) starting with `opps`; the operator dashboard routes stay open
+  unchanged; `tests/test_tenant_api.py` (7).
+- Task 7.4 (this commit) — README (feature row, env bullet, roadmap
+  v0.12) and this section.
+
+### Decisions & deviations (code over plan)
+- The roadmap phrase "Postgres" is honoured where it pays: Postgres is
+  the directory (tenants, keys, gates, metering — the billing plane)
+  in production, while every tenant's engine data stays in its own
+  SQLite file. Rationale: file isolation means rows, WAL files, caps
+  and History are never shared between tenants or with the operator
+  seat; all engine SQL keeps working unchanged and the suite stays
+  offline. A full SQL-port of every engine query to Postgres is a
+  separate, later decision — this phase delivers the structural gate
+  ("me" and "customers" stop sharing a database) without rewriting
+  400 passing tests' worth of engine SQL.
+- The DDL is written once, dialect-neutral: TEXT primary keys (no
+  SERIAL/AUTOINCREMENT anywhere), ISO timestamps, INTEGER counters,
+  JSON-free. Writer discipline: `?` never appears inside string
+  literals in store SQL — placeholders only, translated for Postgres.
+- Keys follow the bot connections' secret discipline exactly:
+  `sfk_` + `token_urlsafe(32)`, shown exactly once at issue, SHA-256
+  in storage, prefix kept for the revocation UX.
+- Plan vocabulary has one placeholder budget (`customer:
+  monthly_requests 10000`) — real tier names and prices are a pricing
+  decision (the strategy doc, parked), not a data-model one; the dict
+  in `tenants.py` is the only edit site.
+- No MCP tools in Phase 7: directory ops are operator/SaaS-shell work
+  (CLI + served `/api/v1`, managed by the owner), while MCP stays the
+  engine surface for agent callers.
+- The v1 run surface is allow-listed and starts with `opps` only —
+  every further kind earns a place behind its own verification.
+- Lesson the wires taught: `authenticate()` answers a flattened row
+  (`tenant_id`, `tenant_name`) while the gate helpers read a tenant
+  row (`id`, `plan`); the first middleware draft passed the wrong
+  shape and `remaining()` raised KeyError — fixed by building the
+  `seat` dict explicitly at the call site. The shapes stay different
+  on purpose (one is a lookup, the other a row); conversion happens
+  where they meet.
+- No third-party derivation this phase (everything is SEOForge
+  original) — no notices rows.
+
+### Toolchain
+- Suite as observed after each run: 387 through Phase 6; 400 after
+  Task 7.1 (+13 `tests/test_tenants.py`); 406 after Task 7.2 (+6
+  `tests/test_tenancy.py`); 413 after Task 7.3 (+7
+  `tests/test_tenant_api.py`). Every store test runs the SQLite
+  backend; Postgres is covered by the translation unit test and the
+  honest driver-missing RuntimeError (the suite monkeypatches
+  `sys.modules`, never connects). The suite never touches
+  `data/seoforge.db`, `data/directory.db`, or the network.
+- `python -m seoforge.cli --help` lists `tenant-add` / `tenants` /
+  `tenant-status` / `tenant-plan` / `key-issue` / `keys` /
+  `key-revoke`; TestClient covers the wire surface offline.
+- Pending origin verification (the customer-zero rule — recorded, not
+  skipped): (1) live `postgresql://` directory CRUD on the hosted
+  seat, (2) the served Bearer flow end-to-end on that seat's URL,
+  (3) the per-tenant file lifecycle on the host's disk. All three run
+  the moment the origin launches.

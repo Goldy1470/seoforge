@@ -585,6 +585,106 @@ def bots_revoke_connection(connection_id: int):
     return Response(status_code=204)
 
 
+# --------------------------------------------------------- tenant data plane
+#
+# /api/v1/* is the SaaS shell's face: Bearer sfk_ keys, a plan gate and a
+# monthly quota, answered before any engine work runs. The operator's own
+# dashboard routes above are unchanged - same-process, local tool.
+
+API_PREFIX = "/api/v1"
+
+# The v1 surface runs engine jobs under the requesting tenant's own scope,
+# allow-listed. 'opps' (the cross-source value recalculation) ships first;
+# every further kind lands here with its own origin verification.
+_V1_RUNS = {
+    "opps": lambda: integrations.recompute(persist=True),
+}
+
+
+@app.middleware("http")
+async def tenant_api_guard(request: Request, call_next):
+    if not request.url.path.startswith(API_PREFIX + "/"):
+        return await call_next(request)
+    from . import tenants
+
+    parts = request.headers.get("authorization", "").split(None, 1)
+    secret = parts[1].strip() if len(parts) == 2 and parts[0].lower() == "bearer" else ""
+    tenant = tenants.authenticate(secret)
+    if tenant is None:
+        return JSONResponse(
+            {
+                "error": "unauthorized",
+                "message": "no valid API key (Authorization: Bearer sfk_...)",
+            },
+            401,
+        )
+    opened = tenants.gate(tenant)
+    if opened["gate"] != "open":
+        return JSONResponse(
+            {
+                "error": "plan_gate",
+                "reason": opened["reason"],
+                "message": f"plan status {opened['status']!r} gates engine work",
+            },
+            402,
+        )
+    # the auth row is flattened (tenant_id, plan); the gate helpers read
+    # a tenant row (id, plan) - build the seat explicitly
+    seat = {"id": tenant["tenant_id"], "plan": tenant["plan"]}
+    if tenants.over_quota(seat):
+        return JSONResponse(
+            {
+                "error": "quota_exhausted",
+                "message": "the plan's monthly request budget is spent",
+                "limits": tenants.plan_limits(tenant["plan"]),
+            },
+            429,
+        )
+    request.state.tenant = tenant
+    return await call_next(request)
+
+
+@app.get(API_PREFIX + "/whoami")
+def api_whoami(request: Request):
+    from . import tenants
+
+    t = request.state.tenant
+    return {
+        "tenant_id": t["tenant_id"],
+        "name": t["tenant_name"],
+        "plan": t["plan"],
+        "status": t["status"],
+        "limits": tenants.plan_limits(t["plan"]),
+        "usage": tenants.usage(t["tenant_id"]),
+        "remaining": tenants.remaining(
+            {"id": t["tenant_id"], "plan": t["plan"]}
+        ),
+    }
+
+
+@app.post(API_PREFIX + "/run/{kind}")
+def api_run(kind: str, request: Request):
+    from . import tenancy, tenants
+
+    fn = _V1_RUNS.get(kind)
+    if fn is None:
+        return JSONResponse(
+            {
+                "error": "unknown",
+                "message": f"the v1 surface runs these kinds: {sorted(_V1_RUNS)}",
+            },
+            400,
+        )
+    t = request.state.tenant
+    try:
+        with tenancy.scoped(t["tenant_id"]):
+            result = fn() or {}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:200]}, 500)
+    tenants.meter(t["tenant_id"], "requests", 1)
+    return {"ok": True, "tenant_id": t["tenant_id"], "result": _clip(result)}
+
+
 def serve(host="127.0.0.1", port=8808):
     import uvicorn
 
