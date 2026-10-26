@@ -213,6 +213,24 @@ def main():
     sp = sub.add_parser("prompt-states")
     sp.add_argument("id", nargs="?", type=int, default=0)
     sub.add_parser("prompt-sweep")
+    sp = sub.add_parser("tenant-add")
+    sp.add_argument("name")
+    sp.add_argument("--plan", default="customer")
+    sp.add_argument("--status", default="active")
+    sp.add_argument("--notes", default="")
+    sub.add_parser("tenants")
+    sp = sub.add_parser("tenant-status")
+    sp.add_argument("id")
+    sp.add_argument("status")
+    sp = sub.add_parser("tenant-plan")
+    sp.add_argument("id")
+    sp.add_argument("plan")
+    sp = sub.add_parser("key-issue")
+    sp.add_argument("id")
+    sp = sub.add_parser("keys")
+    sp.add_argument("id")
+    sp = sub.add_parser("key-revoke")
+    sp.add_argument("key_id")
     sp = sub.add_parser("brave-submit")
     sp.add_argument("urls", nargs="*", default=[], help="defaults to the configured site origin")
     args = ap.parse_args()
@@ -678,6 +696,38 @@ def main():
         from . import prompts
 
         _out(prompts.outcome_sweep(), full=True)
+
+    elif cmd in ("tenants", "tenant-add", "tenant-status", "tenant-plan", "key-issue", "keys", "key-revoke"):
+        from . import tenants
+
+        try:
+            if cmd == "tenants":
+                _out(tenants.list_tenants(), full=True)
+            elif cmd == "tenant-add":
+                tenants.ensure_owner()
+                _out(
+                    tenants.create_tenant(
+                        args.name, plan=args.plan, status=args.status, notes=args.notes
+                    ),
+                    full=True,
+                )
+            elif cmd == "tenant-status":
+                _out(tenants.set_status(args.id, args.status), full=True)
+            elif cmd == "tenant-plan":
+                _out(tenants.set_plan(args.id, args.plan), full=True)
+            elif cmd == "key-issue":
+                # the secret in this answer is shown exactly once
+                _out(tenants.issue_key(args.id), full=True)
+            elif cmd == "keys":
+                _out(tenants.list_keys(args.id), full=True)
+            elif cmd == "key-revoke":
+                _out(
+                    tenants.revoke_key(args.key_id)
+                    or {"note": "nothing to revoke: unknown or already revoked key"},
+                    full=True,
+                )
+        except ValueError as e:
+            _out({"error": "invalid", "message": str(e)}, full=True)
 
     elif cmd == "brave-submit":
         from . import indexing

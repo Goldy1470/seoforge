@@ -3,13 +3,17 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import sqlite3
+from pathlib import Path
 
+from . import tenancy
 from .config import settings
 
 
 def get_db() -> sqlite3.Connection:
     settings.ensure_dirs()
-    conn = sqlite3.connect(settings.db_path)
+    path = tenancy.engine_db_path()
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     from .migrations import apply
