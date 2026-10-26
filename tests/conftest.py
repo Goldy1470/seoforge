@@ -12,6 +12,7 @@ def isolated_db(tmp_path, monkeypatch):
     from seoforge.config import settings
 
     monkeypatch.setattr(settings, "db_path", str(tmp_path / "tests.db"))
+    monkeypatch.setattr(settings, "directory_db", str(tmp_path / "directory.db"))
     monkeypatch.setattr(settings, "exports_dir", str(tmp_path / "exports"))
     yield settings
 
