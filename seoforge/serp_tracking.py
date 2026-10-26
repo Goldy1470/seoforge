@@ -479,15 +479,18 @@ def best_position(history: dict) -> int | None:
 
 def position_change(history: dict, position: int) -> int:
     """Movement against the previous calendar day, exactly as the digest
-    computes it: previous - current; from 0 anything looks like a gain;
-    dropping out of the results reads as the previous minus 100. The
-    digest's calling convention: `history` already holds today's entry
-    (the record landed before the digest ran), so the previous rank is
-    the second-newest day in the dict."""
+    computes it: previous - current; from a 0 previous, showing up in the
+    results reads as an improvement of `position` places; dropping out of
+    the results reads as the previous minus 100. The digest's calling
+    convention: `history` already holds today's entry (the record landed
+    before the digest ran), so the previous rank is the second-newest day
+    in the dict."""
     entries = sorted(history.items(), key=lambda kv: _day_sort_key(kv[0]))
     if len(entries) < 2:
         return 0
     previous = entries[-2][1]
+    if previous == 0:
+        return position
     if position == 0 and previous > 0:
         return previous - 100
     return previous - position

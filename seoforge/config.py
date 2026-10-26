@@ -81,6 +81,15 @@ class Settings:
         os.getenv("SEOFORGE_SERP_TRACKER_SMART_FALLBACK"), False
     )
 
+    # Position-tracker email digests (daily/other_day/hourly lanes per domain)
+    smtp_host: str = os.getenv("SEOFORGE_SMTP_HOST", "")
+    smtp_port: str = os.getenv("SEOFORGE_SMTP_PORT", "")
+    smtp_user: str = os.getenv("SEOFORGE_SMTP_USER", "")
+    smtp_password: str = os.getenv("SEOFORGE_SMTP_PASSWORD", "")
+    smtp_notify_email: str = os.getenv("SEOFORGE_SMTP_NOTIFY_EMAIL", "")
+    smtp_from_email: str = os.getenv("SEOFORGE_SMTP_FROM_EMAIL", "")
+    smtp_from_name: str = os.getenv("SEOFORGE_SMTP_FROM_NAME", "SEOForge")
+
     openseo_url: str = os.getenv("OPENSEO_URL", "")
     openseo_api_key: str = os.getenv("OPENSEO_API_KEY", "")
     openseo_mcp_url: str = os.getenv("OPENSEO_MCP_URL", "https://app.openseo.so/mcp")

@@ -209,6 +209,9 @@ def test_derived_digest_helpers_match_the_reference():
     assert st.position_change(same_day, 3) == 4  # 7 -> 3 improved
     assert st.position_change({"2026-1-4": 5, "2026-1-5": 7, "2026-1-6": 8}, 8) == -1  # declined
     assert st.position_change({"2026-1-4": 5, "2026-1-5": 7, "2026-1-6": 0}, 0) == -93  # dropped out
+    # from a 0 previous day, entering the results reads as a gain of `position`
+    assert st.position_change({"2026-1-4": 0, "2026-1-5": 3}, 3) == 3
+    assert st.position_change({"2026-1-4": 0, "2026-1-5": 0}, 0) == 0  # still lost, not a decline
     assert st.position_change({"2026-1-3": 4}, 1) == 0  # baseline day
     # the week slice keeps calendar order across the year end; 5 days fit whole
     assert st.last_week_history(week) == week

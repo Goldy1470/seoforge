@@ -895,6 +895,95 @@ def deploy_discovery_files(repo_public_dir: str = "") -> dict:
     return publisher.deploy_local_repo(repo_public_dir or None)
 
 
+# ------------------------------------------------------- position tracking
+
+
+@mcp.tool()
+def serp_domain_add(domain: str, notification_emails: str = "", scrape_strategy: str = "") -> dict:
+    """Track one domain for daily position scraping (creating twice answers the existing row)."""
+    from . import serp_tracking
+
+    try:
+        return serp_tracking.add_domain(domain, notification_emails=notification_emails, scrape_strategy=scrape_strategy)
+    except ValueError as e:
+        return {"error": "invalid", "message": str(e)}
+
+
+@mcp.tool()
+def serp_domains_list() -> list:
+    """Every tracked domain with its keyword counts and notification settings."""
+    from . import serp_tracking
+
+    return serp_tracking.list_domains()
+
+
+@mcp.tool()
+def serp_keyword_add(keyword: str, domain: str, device: str = "desktop", country: str = "US", city: str = "", tags: str = "") -> dict:
+    """Track one keyword's rank for a domain (desktop or mobile; duplicates are allowed on purpose)."""
+    from . import serp_tracking
+
+    try:
+        return serp_tracking.add_keyword(keyword, domain, device=device, country=country, city=city, tags=tags)
+    except ValueError as e:
+        return {"error": "invalid", "message": str(e)}
+
+
+@mcp.tool()
+def serp_keywords_list(domain: str = "", device: str = "", country: str = "", keyword: str = "") -> list:
+    """Tracked keywords with positions, daily history and the last scrape result."""
+    from . import serp_tracking
+
+    return serp_tracking.list_keywords(
+        domain or None, device=device or None, country=country or None, keyword=keyword or None
+    )
+
+
+@mcp.tool()
+def serp_refresh(domain: str = "") -> dict:
+    """Scrape current positions for one domain's tracked keywords through the configured provider."""
+    from . import serp_scraper
+
+    try:
+        return serp_scraper.refresh_domain(domain)
+    except ValueError as e:
+        return {"error": "invalid", "message": str(e)}
+
+
+@mcp.tool()
+def serp_retries(limit: int = 100) -> list:
+    """Failed scrapes waiting in the hourly retry lane."""
+    from . import serp_tracking
+
+    return serp_tracking.pending_retries(limit)
+
+
+@mcp.tool()
+def serp_insights(domain: str = "") -> dict:
+    """Rank-state rollup: distribution, movement counts, average and best position."""
+    from . import serp_scraper
+
+    return serp_scraper.insights(domain or None)
+
+
+@mcp.tool()
+def serp_digest(domain: str = "") -> dict:
+    """Email position digests per domain (SMTP knobs must be set; reads them from the environment)."""
+    from . import serp_digest
+
+    return serp_digest.digest_all(domain=domain or "")
+
+
+@mcp.tool()
+def serp_csv(domain: str) -> dict:
+    """Export a domain's tracked keywords as the reference-shaped CSV artifact."""
+    from . import serp_scraper
+
+    try:
+        return serp_scraper.keywords_csv(domain)
+    except ValueError as e:
+        return {"error": "invalid", "message": str(e)}
+
+
 def main():
     args = [a for a in sys.argv[1:] if a]
     if args and args[0] == "http":
